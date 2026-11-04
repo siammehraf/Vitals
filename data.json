@@ -1,0 +1,12 @@
+{
+  "themePreset": "vitals-stealth",
+  "includedFolders": "",
+  "excludedFolders": "Templates, Archive",
+  "categoryColors": {
+    "Writing": "#ff0000",
+    "Reading": "#38bdf8",
+    "Coding": "#818cf8",
+    "Research": "#f59e0b",
+    "Unknown": "#64748b"
+  }
+}

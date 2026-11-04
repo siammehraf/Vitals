@@ -28,199 +28,154 @@ __export(main_exports, {
   default: () => VitalsPlugin
 });
 module.exports = __toCommonJS(main_exports);
+var import_obsidian4 = require("obsidian");
+
+// src/dashboard/DashboardView.ts
 var import_obsidian2 = require("obsidian");
 
-// src/core/DataEngine.ts
-var DataEngine = class {
-  constructor(app) {
-    this.app = app;
+// src/dashboard/components/HeatmapDayModal.ts
+var import_obsidian = require("obsidian");
+var HeatmapDayModal = class extends import_obsidian.Modal {
+  constructor(app, dateStr, activities) {
+    super(app);
+    this.dateStr = dateStr;
+    this.activities = activities;
   }
-  getActivities() {
-    const files = this.app.vault.getMarkdownFiles();
-    const activities = [];
-    for (const file of files) {
-      const cache = this.app.metadataCache.getFileCache(file);
-      if (!cache || !cache.frontmatter)
-        continue;
-      const fm = cache.frontmatter;
-      const rawDuration = this.findFrontmatterValue(fm, [
-        "duration",
-        "Duration",
-        "DURATION",
-        "time",
-        "Time",
-        "TIME",
-        "spent",
-        "Spent"
-      ]);
-      if (rawDuration === void 0 || rawDuration === null)
-        continue;
-      const parsedMinutes = this.parseDurationToMinutes(rawDuration);
-      if (parsedMinutes <= 0)
-        continue;
-      const rawType = this.findFrontmatterValue(fm, [
-        "type",
-        "Type",
-        "TYPE",
-        "category",
-        "Category",
-        "CATEGORY",
-        "tag",
-        "tags"
-      ]);
-      const normalizedType = this.resolveType(rawType, file);
-      const rawDate = this.findFrontmatterValue(fm, ["date", "Date", "DATE", "created", "Created"]);
-      const normalizedDate = this.resolveDate(rawDate, file);
-      const rawProject = this.findFrontmatterValue(fm, ["project", "Project", "PROJECT"]);
-      activities.push({
-        id: file.path,
-        title: file.basename,
-        type: normalizedType,
-        date: normalizedDate,
-        duration: parsedMinutes,
-        project: rawProject ? String(rawProject).trim() : void 0
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("vitals-day-modal");
+    const totalMinutes = this.activities.reduce((sum, a) => sum + a.duration, 0);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    const durationFormatted = h > 0 ? `${h}h ${m}m` : `${m}m`;
+    const header = contentEl.createEl("div", { cls: "vitals-modal-header" });
+    header.createEl("h2", { text: `Activities on ${this.dateStr}` });
+    header.createEl("p", {
+      text: `${this.activities.length} session(s) logged \xB7 Total: ${durationFormatted}`,
+      cls: "vitals-modal-subtitle"
+    });
+    if (this.activities.length === 0) {
+      contentEl.createEl("p", { text: "No activities recorded on this date.", cls: "analytics-empty-message" });
+      return;
+    }
+    const list = contentEl.createEl("div", { cls: "vitals-modal-list" });
+    for (const act of this.activities) {
+      const item = list.createEl("div", { cls: "vitals-modal-item" });
+      const infoCol = item.createEl("div", { cls: "vitals-item-info" });
+      const link = infoCol.createEl("a", { text: act.title, cls: "vitals-item-title" });
+      link.addEventListener("click", async () => {
+        const file = this.app.vault.getAbstractFileByPath(act.id);
+        if (file instanceof import_obsidian.TFile) {
+          const leaf = this.app.workspace.getLeaf(false);
+          await leaf.openFile(file);
+          this.close();
+        }
       });
+      const catBadge = infoCol.createEl("span", { text: act.type, cls: "vitals-item-badge" });
+      if (act.project) {
+        infoCol.createEl("span", { text: `@${act.project}`, cls: "vitals-item-project" });
+      }
+      const durHours = (act.duration / 60).toFixed(1);
+      const durationCol = item.createEl("div", { cls: "vitals-item-duration" });
+      durationCol.createEl("div", { text: `${durHours}h`, cls: "vitals-item-dur-main" });
+      durationCol.createEl("div", { text: `${act.duration}m`, cls: "vitals-item-dur-sub" });
     }
-    return activities;
   }
-  findFrontmatterValue(frontmatter, candidates) {
-    const keys = Object.keys(frontmatter);
-    for (const candidate of candidates) {
-      const matchedKey = keys.find((k) => k.trim().toLowerCase() === candidate.trim().toLowerCase());
-      if (matchedKey !== void 0 && frontmatter[matchedKey] !== void 0 && frontmatter[matchedKey] !== null) {
-        return frontmatter[matchedKey];
-      }
-    }
-    return void 0;
-  }
-  resolveType(rawType, file) {
-    if (rawType) {
-      if (Array.isArray(rawType) && rawType.length > 0) {
-        return String(rawType[0]).replace(/^#/, "").trim();
-      }
-      const str = String(rawType).trim();
-      if (str.length > 0) {
-        return str.replace(/^#/, "");
-      }
-    }
-    if (file.parent && file.parent.name && file.parent.name !== "/" && file.parent.name !== "") {
-      return file.parent.name;
-    }
-    return "General";
-  }
-  resolveDate(rawDate, file) {
-    if (rawDate) {
-      if (typeof rawDate === "string") {
-        const trimmed = rawDate.trim();
-        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-          return trimmed;
-        }
-        const parsed = new Date(trimmed);
-        if (!isNaN(parsed.getTime())) {
-          return parsed.toISOString().split("T")[0];
-        }
-      } else if (rawDate instanceof Date) {
-        return rawDate.toISOString().split("T")[0];
-      }
-    }
-    const fallbackDate = new Date(file.stat.ctime);
-    return fallbackDate.toISOString().split("T")[0];
-  }
-  parseDurationToMinutes(val) {
-    if (typeof val === "number") {
-      return !isNaN(val) && val > 0 ? Math.round(val) : 0;
-    }
-    if (Array.isArray(val)) {
-      let total = 0;
-      for (const item of val) {
-        total += this.parseDurationToMinutes(item);
-      }
-      return Math.round(total);
-    }
-    if (typeof val === "string") {
-      const text = val.trim();
-      if (!text)
-        return 0;
-      let totalMinutes = 0;
-      let matchedAny = false;
-      const hourRegex = /(\d+(?:\.\d+)?)\s*(?:h\b|hr\b|hrs\b|hours?\b|[hH])/gi;
-      let hourMatch;
-      while ((hourMatch = hourRegex.exec(text)) !== null) {
-        const hours = parseFloat(hourMatch[1]);
-        if (!isNaN(hours)) {
-          totalMinutes += hours * 60;
-          matchedAny = true;
-        }
-      }
-      const minRegex = /(\d+(?:\.\d+)?)\s*(?:m\b|min\b|mins\b|minutes?\b|[mM])/gi;
-      let minMatch;
-      while ((minMatch = minRegex.exec(text)) !== null) {
-        const mins = parseFloat(minMatch[1]);
-        if (!isNaN(mins)) {
-          totalMinutes += mins;
-          matchedAny = true;
-        }
-      }
-      if (matchedAny) {
-        return Math.round(totalMinutes);
-      }
-      const bareNumberMatch = text.match(/\b\d+(?:\.\d+)?\b/);
-      if (bareNumberMatch) {
-        const num = parseFloat(bareNumberMatch[0]);
-        if (!isNaN(num) && num > 0) {
-          return Math.round(num);
-        }
-      }
-    }
-    return 0;
+  onClose() {
+    this.contentEl.empty();
   }
 };
 
-// src/dashboard/DashboardView.ts
-var import_obsidian = require("obsidian");
-
 // src/dashboard/components/HeatmapView.ts
-var HeatmapView = class _HeatmapView {
-  static render(container, activities) {
-    const existing = container.querySelector(".heatmap-card");
-    if (existing)
-      existing.remove();
-    const card = container.createEl("div", { cls: "analytics-card heatmap-card" });
+var _HeatmapView = class _HeatmapView {
+  static render(container, activities, app) {
+    let card = container.querySelector(".heatmap-card");
+    if (!card) {
+      card = container.createEl("div", { cls: "analytics-card heatmap-card" });
+    } else {
+      card.empty();
+    }
+    const yearsSet = /* @__PURE__ */ new Set();
+    const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
+    yearsSet.add(currentYear);
+    for (const a of activities) {
+      if (a.date && a.date.length >= 4) {
+        const y = parseInt(a.date.substring(0, 4), 10);
+        if (!isNaN(y))
+          yearsSet.add(y);
+      }
+    }
+    const sortedYears = Array.from(yearsSet).sort((a, b) => b - a);
     const header = card.createEl("div", { cls: "heatmap-header" });
-    header.createEl("div", { text: "Consistency Heatmap", cls: "heatmap-title" });
+    const titleArea = header.createEl("div", { cls: "analytics-title-area-compact" });
+    titleArea.createEl("div", { text: "Consistency Heatmap", cls: "heatmap-title" });
+    const controls = header.createEl("div", { cls: "analytics-pill-group" });
+    const rollingBtn = controls.createEl("button", {
+      text: "Last 52W",
+      cls: `analytics-pill-btn ${this.currentScope === "rolling" ? "is-active" : ""}`
+    });
+    rollingBtn.addEventListener("click", () => {
+      if (this.currentScope === "rolling")
+        return;
+      this.currentScope = "rolling";
+      _HeatmapView.render(container, activities, app);
+    });
+    for (const yr of sortedYears) {
+      const yrBtn = controls.createEl("button", {
+        text: `${yr}`,
+        cls: `analytics-pill-btn ${this.currentScope === yr ? "is-active" : ""}`
+      });
+      yrBtn.addEventListener("click", () => {
+        if (this.currentScope === yr)
+          return;
+        this.currentScope = yr;
+        _HeatmapView.render(container, activities, app);
+      });
+    }
     const tooltip = card.createEl("div", { cls: "heatmap-floating-tooltip" });
     const gridContainer = card.createEl("div", { cls: "heatmap-grid-container" });
     const grid = gridContainer.createEl("div", { cls: "heatmap-grid" });
-    const minutesMap = {};
+    const dayActivitiesMap = {};
     for (const a of activities) {
       if (a.date) {
-        minutesMap[a.date] = (minutesMap[a.date] || 0) + a.duration;
+        if (!dayActivitiesMap[a.date])
+          dayActivitiesMap[a.date] = [];
+        dayActivitiesMap[a.date].push(a);
       }
     }
-    const today = /* @__PURE__ */ new Date();
-    const daysToShow = 52 * 7;
-    const startDate = new Date(today);
-    startDate.setDate(today.getDate() - (daysToShow - 1));
-    for (let i = 0; i < daysToShow; i++) {
+    let startDate;
+    let daysCount;
+    if (this.currentScope === "rolling") {
+      const today = /* @__PURE__ */ new Date();
+      daysCount = 52 * 7;
+      startDate = new Date(today);
+      startDate.setDate(today.getDate() - (daysCount - 1));
+    } else {
+      const year = this.currentScope;
+      startDate = new Date(year, 0, 1);
+      const isLeap = year % 4 === 0 && year % 100 !== 0 || year % 400 === 0;
+      daysCount = isLeap ? 366 : 365;
+    }
+    for (let i = 0; i < daysCount; i++) {
       const cellDate = new Date(startDate);
       cellDate.setDate(startDate.getDate() + i);
       const yyyy = cellDate.getFullYear();
       const mm = String(cellDate.getMonth() + 1).padStart(2, "0");
       const dd = String(cellDate.getDate()).padStart(2, "0");
       const iso = `${yyyy}-${mm}-${dd}`;
-      const totalMins = minutesMap[iso] || 0;
+      const dayActivities = dayActivitiesMap[iso] || [];
+      const totalMins = dayActivities.reduce((sum, a) => sum + a.duration, 0);
       const level = _HeatmapView.getIntensityLevel(totalMins);
       const displayHours = (totalMins / 60).toFixed(1);
       const cell = grid.createEl("div", {
         cls: `heatmap-cell level-${level}`,
-        attr: {
-          "data-date": iso
-        }
+        attr: { "data-date": iso }
       });
-      cell.addEventListener("mouseenter", (e) => {
+      cell.addEventListener("mouseenter", () => {
         const rect = cell.getBoundingClientRect();
         const cardRect = card.getBoundingClientRect();
-        tooltip.textContent = `${iso}: ${displayHours} hrs (${totalMins}m)`;
+        tooltip.textContent = `${iso}: ${displayHours} hrs (${totalMins}m) \xB7 Click to view`;
         tooltip.addClass("is-visible");
         const left = rect.left - cardRect.left + rect.width / 2;
         const top = rect.top - cardRect.top - 8;
@@ -229,6 +184,9 @@ var HeatmapView = class _HeatmapView {
       });
       cell.addEventListener("mouseleave", () => {
         tooltip.removeClass("is-visible");
+      });
+      cell.addEventListener("click", () => {
+        new HeatmapDayModal(app, iso, dayActivities).open();
       });
     }
     const footer = card.createEl("div", { cls: "heatmap-footer" });
@@ -251,6 +209,8 @@ var HeatmapView = class _HeatmapView {
     return 4;
   }
 };
+_HeatmapView.currentScope = "rolling";
+var HeatmapView = _HeatmapView;
 
 // node_modules/@kurkle/color/dist/color.esm.js
 function round(v) {
@@ -13379,9 +13339,9 @@ WeeklyProgressView.nextBtnElement = null;
 WeeklyProgressView.canvasElement = null;
 
 // src/dashboard/components/CategoryChartView.ts
-Chart.register(DoughnutController, ArcElement, plugin_tooltip);
+Chart.register(DoughnutController, ArcElement, BarController, BarElement, CategoryScale, LinearScale, plugin_tooltip, plugin_legend);
 var CategoryChartView = class {
-  static render(container, activities) {
+  static render(container, activities, customColors = {}) {
     if (this.chartInstance) {
       this.chartInstance.destroy();
       this.chartInstance = null;
@@ -13389,20 +13349,57 @@ var CategoryChartView = class {
     const card = container.createEl("div", { cls: "analytics-card donut-card" });
     const header = card.createEl("div", { cls: "analytics-card-header" });
     header.createEl("div", { text: "Category Distribution", cls: "analytics-card-title" });
+    const toggleGroup = header.createEl("div", { cls: "analytics-pill-group" });
+    const ringBtn = toggleGroup.createEl("button", {
+      text: "Ring",
+      cls: `analytics-pill-btn ${this.currentViewType === "ring" ? "is-active" : ""}`
+    });
+    const barBtn = toggleGroup.createEl("button", {
+      text: "Bar",
+      cls: `analytics-pill-btn ${this.currentViewType === "bar" ? "is-active" : ""}`
+    });
+    ringBtn.addEventListener("click", () => {
+      if (this.currentViewType === "ring")
+        return;
+      this.currentViewType = "ring";
+      ringBtn.addClass("is-active");
+      barBtn.removeClass("is-active");
+      this.rebuildChart(chartWrapper, activities, customColors);
+    });
+    barBtn.addEventListener("click", () => {
+      if (this.currentViewType === "bar")
+        return;
+      this.currentViewType = "bar";
+      barBtn.addClass("is-active");
+      ringBtn.removeClass("is-active");
+      this.rebuildChart(chartWrapper, activities, customColors);
+    });
+    const chartWrapper = card.createEl("div", { cls: "donut-chart-wrapper" });
+    this.rebuildChart(chartWrapper, activities, customColors);
+  }
+  static rebuildChart(wrapper, activities, customColors) {
+    wrapper.empty();
+    if (this.chartInstance) {
+      this.chartInstance.destroy();
+      this.chartInstance = null;
+    }
     const categoryTotals = {};
     for (const a of activities) {
-      const cat = a.type || "General";
+      const cat = a.type || "Unknown";
       categoryTotals[cat] = (categoryTotals[cat] || 0) + a.duration;
     }
-    const labels = Object.keys(categoryTotals);
-    const dataValues = labels.map((cat) => Number((categoryTotals[cat] / 60).toFixed(1)));
+    const sortedEntries = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+    const labels = sortedEntries.map(([name]) => name);
+    const dataValues = sortedEntries.map(([, mins]) => Number((mins / 60).toFixed(1)));
     if (labels.length === 0 || dataValues.every((v) => v === 0)) {
-      card.createEl("p", { text: "No activity recorded for this period.", cls: "analytics-empty-message" });
+      wrapper.createEl("p", {
+        text: "No activity recorded for this period.",
+        cls: "analytics-empty-message"
+      });
       return;
     }
-    const chartWrapper = card.createEl("div", { cls: "donut-chart-wrapper" });
-    const canvas = chartWrapper.createEl("canvas");
-    const palette = [
+    const canvas = wrapper.createEl("canvas");
+    const fallbackPalette = [
       "#14b8a6",
       // teal
       "#38bdf8",
@@ -13418,91 +13415,146 @@ var CategoryChartView = class {
       "#34d399"
       // emerald
     ];
-    const sliceColors = palette.slice(0, labels.length);
-    this.chartInstance = new Chart(canvas, {
-      type: "doughnut",
-      data: {
-        labels,
-        datasets: [
-          {
-            data: dataValues,
-            backgroundColor: sliceColors,
-            borderColor: "#11141a",
-            borderWidth: 2,
-            borderAlign: "inner",
-            spacing: 0,
-            hoverOffset: 0
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
-        cutout: "72%",
-        layout: {
-          padding: 6
+    const sliceColors = labels.map((label, idx) => {
+      return customColors[label] || fallbackPalette[idx % fallbackPalette.length];
+    });
+    if (this.currentViewType === "ring") {
+      this.chartInstance = new Chart(canvas, {
+        type: "doughnut",
+        data: {
+          labels,
+          datasets: [
+            {
+              data: dataValues,
+              backgroundColor: sliceColors,
+              borderColor: "#11141a",
+              borderWidth: 2,
+              hoverOffset: 4
+            }
+          ]
         },
-        plugins: {
-          legend: {
-            display: false
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
+          cutout: "72%",
+          layout: {
+            padding: { top: 6, bottom: 8 }
           },
-          tooltip: {
-            backgroundColor: "rgba(15, 23, 42, 0.95)",
-            titleColor: "#f8fafc",
-            bodyColor: "#e2e8f0",
-            borderColor: "rgba(255, 255, 255, 0.12)",
-            borderWidth: 1,
-            padding: 10,
-            cornerRadius: 8,
-            titleFont: {
-              family: "'Geist Mono', monospace",
-              size: 12,
-              weight: "bold"
+          plugins: {
+            legend: {
+              display: true,
+              position: "bottom",
+              labels: {
+                color: "#e2e8f0",
+                usePointStyle: true,
+                pointStyle: "rectRounded",
+                boxWidth: 8,
+                boxHeight: 8,
+                padding: 14,
+                font: {
+                  family: "'Geist Mono', ui-monospace, SFMono-Regular, monospace",
+                  size: 11,
+                  weight: "bold"
+                }
+              }
             },
-            bodyFont: {
-              family: "'Geist Mono', monospace",
-              size: 11
-            },
-            callbacks: {
-              label: (ctx) => ` ${ctx.label}: ${ctx.parsed} hrs`
+            tooltip: {
+              backgroundColor: "rgba(15, 23, 42, 0.95)",
+              titleColor: "#f8fafc",
+              bodyColor: "#e2e8f0",
+              borderColor: "rgba(255, 255, 255, 0.12)",
+              borderWidth: 1,
+              padding: 10,
+              cornerRadius: 8,
+              titleFont: {
+                family: "'Geist Mono', monospace",
+                size: 12,
+                weight: "bold"
+              },
+              bodyFont: {
+                family: "'Geist Mono', monospace",
+                size: 11
+              },
+              callbacks: {
+                label: (ctx) => ` ${ctx.label}: ${ctx.parsed} hrs`
+              }
             }
           }
+        }
+      });
+    } else {
+      this.chartInstance = new Chart(canvas, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            {
+              data: dataValues,
+              backgroundColor: sliceColors,
+              borderRadius: 5,
+              borderSkipped: false,
+              barThickness: 16
+            }
+          ]
         },
-        elements: {
-          arc: {
-            borderJoinStyle: "round"
-          }
-        }
-      },
-      plugins: [
-        {
-          id: "enforceMinArc",
-          beforeUpdate(chart) {
-            const meta = chart.getDatasetMeta(0);
-            if (!meta || !meta.data || meta.data.length <= 1)
-              return;
-            const minRadians = 0.09;
-            const total = meta.controller._getDataset().data.reduce((a, b) => a + b, 0);
-            if (total === 0)
-              return;
-            meta.data.forEach((element, i) => {
-              const val = Number(chart.data.datasets[0].data[i]);
-              if (val > 0 && element.circumference !== void 0 && element.circumference < minRadians) {
-                element.circumference = minRadians;
+        options: {
+          indexAxis: "y",
+          responsive: true,
+          maintainAspectRatio: false,
+          devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: "rgba(15, 23, 42, 0.95)",
+              titleColor: "#f8fafc",
+              bodyColor: "#e2e8f0",
+              borderColor: "rgba(255, 255, 255, 0.12)",
+              borderWidth: 1,
+              padding: 10,
+              cornerRadius: 8,
+              titleFont: {
+                family: "'Geist Mono', monospace",
+                size: 12,
+                weight: "bold"
+              },
+              bodyFont: {
+                family: "'Geist Mono', monospace",
+                size: 11
+              },
+              callbacks: {
+                label: (ctx) => ` ${ctx.parsed.x} hrs`
               }
-            });
+            }
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: { color: "rgba(148, 163, 184, 0.08)" },
+              ticks: {
+                color: "#64748b",
+                font: {
+                  family: "'Geist Mono', monospace",
+                  size: 10
+                },
+                callback: (v) => `${v}h`
+              }
+            },
+            y: {
+              grid: { display: false },
+              ticks: {
+                color: "#e2e8f0",
+                font: {
+                  family: "'Geist Mono', monospace",
+                  size: 11,
+                  weight: "bold"
+                }
+              }
+            }
           }
         }
-      ]
-    });
-    const legendContainer = card.createEl("div", { cls: "donut-html-legend" });
-    labels.forEach((label, idx) => {
-      const item = legendContainer.createEl("div", { cls: "donut-legend-item" });
-      const dot = item.createEl("span", { cls: "donut-legend-dot" });
-      dot.style.backgroundColor = sliceColors[idx];
-      item.createEl("span", { text: label });
-    });
+      });
+    }
   }
   static destroy() {
     if (this.chartInstance) {
@@ -13512,17 +13564,102 @@ var CategoryChartView = class {
   }
 };
 CategoryChartView.chartInstance = null;
+CategoryChartView.currentViewType = "ring";
+
+// src/dashboard/components/TimeOfDayView.ts
+var TimeOfDayView = class {
+  static render(container, activities) {
+    const existing = container.querySelector(".punchcard-card");
+    if (existing)
+      existing.remove();
+    const card = container.createEl("div", { cls: "analytics-card punchcard-card" });
+    const header = card.createEl("div", { cls: "analytics-card-header" });
+    header.createEl("div", { text: "Productivity by Time of Day", cls: "analytics-card-title" });
+    header.createEl("div", { text: "24-Hour Distribution", cls: "punchcard-subtitle" });
+    const matrix = Array.from({ length: 7 }, () => Array(24).fill(0));
+    let maxMinutesInCell = 0;
+    for (const a of activities) {
+      if (!a.date)
+        continue;
+      const d = /* @__PURE__ */ new Date(a.date + "T00:00:00");
+      const dayIndex = d.getDay();
+      const hourIndex = a.hour !== void 0 ? a.hour : 12;
+      matrix[dayIndex][hourIndex] += a.duration;
+      if (matrix[dayIndex][hourIndex] > maxMinutesInCell) {
+        maxMinutesInCell = matrix[dayIndex][hourIndex];
+      }
+    }
+    const daysLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const tooltip = card.createEl("div", { cls: "heatmap-floating-tooltip" });
+    const wrapper = card.createEl("div", { cls: "punchcard-wrapper" });
+    const grid = wrapper.createEl("div", { cls: "punchcard-grid" });
+    grid.createEl("div", { cls: "punchcard-corner" });
+    for (let h = 0; h < 24; h++) {
+      const headerTick = grid.createEl("div", { cls: "punchcard-hour-header" });
+      if (h % 3 === 0) {
+        headerTick.setText(`${h}:00`);
+      }
+    }
+    for (let day = 0; day < 7; day++) {
+      grid.createEl("div", { text: daysLabels[day], cls: "punchcard-day-label" });
+      for (let hr = 0; hr < 24; hr++) {
+        const mins = matrix[day][hr];
+        const ratio = maxMinutesInCell > 0 ? mins / maxMinutesInCell : 0;
+        const level = this.getIntensityLevel(ratio, mins);
+        const cell = grid.createEl("div", {
+          cls: `punchcard-dot level-${level}`
+        });
+        cell.addEventListener("mouseenter", () => {
+          const rect = cell.getBoundingClientRect();
+          const cardRect = card.getBoundingClientRect();
+          const hrsText = (mins / 60).toFixed(1);
+          tooltip.textContent = `${daysLabels[day]} @ ${hr}:00 \u2014 ${hrsText} hrs (${mins}m)`;
+          tooltip.addClass("is-visible");
+          const left = rect.left - cardRect.left + rect.width / 2;
+          const top = rect.top - cardRect.top - 8;
+          tooltip.style.left = `${left}px`;
+          tooltip.style.top = `${top}px`;
+        });
+        cell.addEventListener("mouseleave", () => {
+          tooltip.removeClass("is-visible");
+        });
+      }
+    }
+  }
+  static getIntensityLevel(ratio, mins) {
+    if (mins <= 0)
+      return 0;
+    if (ratio < 0.25)
+      return 1;
+    if (ratio < 0.5)
+      return 2;
+    if (ratio < 0.75)
+      return 3;
+    return 4;
+  }
+};
 
 // src/dashboard/DashboardView.ts
 var DASHBOARD_VIEW_TYPE = "vitals-dashboard-view";
-var VIEW_TYPE_VITALS = DASHBOARD_VIEW_TYPE;
-var DashboardView = class extends import_obsidian.ItemView {
-  constructor(leaf, dataEngine) {
+var DashboardView = class extends import_obsidian2.ItemView {
+  constructor(leaf, dataEngine, settings) {
     super(leaf);
     this.currentRange = "30d";
     this.rangeOffset = 0;
     this.progressMode = "day";
+    // Project Filtering State
+    this.selectedProject = "all";
+    // Activity Feed State
+    this.feedDayOffset = 0;
+    this.feedPageIndex = 0;
+    this.FEED_PAGE_SIZE = 15;
+    this.feedCardEl = null;
     this.dataEngine = dataEngine;
+    this.settings = settings;
+  }
+  updateSettings(settings) {
+    this.settings = settings;
+    this.render();
   }
   getViewType() {
     return DASHBOARD_VIEW_TYPE;
@@ -13537,15 +13674,79 @@ var DashboardView = class extends import_obsidian.ItemView {
     this.render();
   }
   render() {
+    var _a;
     const container = this.contentEl;
     container.empty();
     container.addClass("activity-analytics-container");
-    const allActivities = this.dataEngine.getActivities();
+    const activeTheme = ((_a = this.settings) == null ? void 0 : _a.themePreset) || "vitals-stealth";
+    container.removeClass(
+      "theme-vitals-stealth",
+      "theme-github-dark",
+      "theme-github-light",
+      "theme-nord-frost",
+      "theme-obsidian-native"
+    );
+    container.addClass(`theme-${activeTheme}`);
+    const rawActivities = this.dataEngine.getActivities();
+    const projectCounts = {};
+    for (const a of rawActivities) {
+      if (a.project) {
+        projectCounts[a.project] = (projectCounts[a.project] || 0) + 1;
+      }
+    }
+    const uniqueProjects = Object.keys(projectCounts).sort();
+    const allActivities = this.selectedProject === "all" ? rawActivities : rawActivities.filter((a) => a.project === this.selectedProject);
     const topBar = container.createEl("div", { cls: "analytics-top-bar" });
     const titleArea = topBar.createEl("div", { cls: "analytics-title-area" });
     titleArea.createEl("h2", { text: "Vitals" });
     const filterContainer = topBar.createEl("div", { cls: "analytics-top-controls" });
-    if (this.currentRange === "month" || this.currentRange === "year") {
+    if (uniqueProjects.length > 0) {
+      const projectPill = filterContainer.createEl("button", {
+        cls: `analytics-pill-btn project-pill-btn ${this.selectedProject !== "all" ? "is-active" : ""}`
+      });
+      const currentLabel = this.selectedProject === "all" ? "All Projects" : `@${this.selectedProject}`;
+      projectPill.createEl("span", { text: currentLabel });
+      projectPill.createEl("span", { text: " \u25BE", cls: "project-pill-arrow" });
+      projectPill.addEventListener("click", (evt) => {
+        const menu = new import_obsidian2.Menu();
+        menu.addItem((item) => {
+          item.setTitle("All Projects").setChecked(this.selectedProject === "all").onClick(() => {
+            this.selectedProject = "all";
+            this.feedPageIndex = 0;
+            this.render();
+          });
+        });
+        menu.addSeparator();
+        for (const proj of uniqueProjects) {
+          menu.addItem((item) => {
+            item.setTitle(`@${proj} (${projectCounts[proj]})`).setChecked(this.selectedProject === proj).onClick(() => {
+              this.selectedProject = proj;
+              this.feedPageIndex = 0;
+              this.render();
+            });
+          });
+        }
+        menu.showAtMouseEvent(evt);
+      });
+    }
+    const exportGroup = filterContainer.createEl("div", { cls: "analytics-pill-group" });
+    const csvBtn = exportGroup.createEl("button", {
+      text: "CSV",
+      cls: "analytics-pill-btn",
+      attr: { "aria-label": "Export visible data as CSV" }
+    });
+    csvBtn.addEventListener("click", () => {
+      this.exportCSV(filteredActivities);
+    });
+    const mdBtn = exportGroup.createEl("button", {
+      text: "MD",
+      cls: "analytics-pill-btn",
+      attr: { "aria-label": "Export visible summary as Markdown" }
+    });
+    mdBtn.addEventListener("click", () => {
+      this.exportMarkdown(filteredActivities);
+    });
+    if (this.currentRange === "day" || this.currentRange === "month" || this.currentRange === "year") {
       const navGroup = filterContainer.createEl("div", { cls: "analytics-pill-group range-nav-group" });
       const prevBtn = navGroup.createEl("button", {
         text: "\u2039",
@@ -13575,6 +13776,7 @@ var DashboardView = class extends import_obsidian.ItemView {
     }
     const pillGroup = filterContainer.createEl("div", { cls: "analytics-pill-group" });
     const ranges = [
+      { key: "day", label: "Day" },
       { key: "30d", label: "30D" },
       { key: "month", label: "Month" },
       { key: "year", label: "Year" },
@@ -13592,45 +13794,353 @@ var DashboardView = class extends import_obsidian.ItemView {
       });
     }
     const filteredActivities = this.filterActivities(allActivities, this.currentRange, this.rangeOffset);
-    this.renderMetricCards(container, filteredActivities);
-    HeatmapView.render(container, allActivities);
+    const prevActivities = this.getPreviousPeriodActivities(allActivities, this.currentRange, this.rangeOffset);
+    this.renderMetricCards(container, filteredActivities, prevActivities);
+    HeatmapView.render(container, allActivities, this.app);
+    TimeOfDayView.render(container, filteredActivities);
     const chartsRow = container.createEl("div", { cls: "analytics-charts-row" });
     WeeklyProgressView.render(chartsRow, allActivities, this.progressMode, (newMode) => {
       this.progressMode = newMode;
       this.render();
     });
-    CategoryChartView.render(chartsRow, filteredActivities);
+    CategoryChartView.render(chartsRow, filteredActivities, this.settings.categoryColors);
+    this.feedCardEl = container.createEl("div", { cls: "analytics-card vitals-recent-card" });
+    this.renderActivityFeedInPlace(allActivities);
   }
-  renderMetricCards(container, activities) {
+  /**
+   * Metric summary cards with percentage comparison deltas
+   */
+  renderMetricCards(container, activities, prevActivities) {
     const grid = container.createEl("div", { cls: "analytics-metrics-grid" });
     const totalMinutes = activities.reduce((sum, a) => sum + a.duration, 0);
     const totalHours = (totalMinutes / 60).toFixed(1);
+    const prevMinutes = prevActivities.reduce((sum, a) => sum + a.duration, 0);
+    const timeDelta = this.calculateDelta(totalMinutes, prevMinutes);
     const h = Math.floor(totalMinutes / 60);
     const m = totalMinutes % 60;
     const loggedBadge = h > 0 ? `${h}h ${m}m logged` : `${m}m logged`;
     const activeDaysSet = new Set(activities.map((a) => a.date).filter(Boolean));
     const activeDays = activeDaysSet.size;
+    const prevActiveDaysSet = new Set(prevActivities.map((a) => a.date).filter(Boolean));
+    const daysDelta = this.calculateDelta(activeDays, prevActiveDaysSet.size);
     const uniqueCategories = new Set(activities.map((a) => a.type).filter(Boolean)).size;
     const avgMinutesPerDay = activeDays > 0 ? Math.round(totalMinutes / activeDays) : 0;
     const avgHours = (avgMinutesPerDay / 60).toFixed(1);
     const metrics = [
-      { label: "Total Time", value: totalHours, unit: "hrs", badge: loggedBadge },
-      { label: "Active Days", value: `${activeDays}`, unit: "days", badge: "consistency" },
-      { label: "Categories", value: `${uniqueCategories}`, unit: "types", badge: "active" },
-      { label: "Daily Avg", value: avgHours, unit: "hrs/day", badge: "pace" }
+      {
+        label: "Total Time",
+        value: totalHours,
+        unit: "hrs",
+        badge: loggedBadge,
+        delta: timeDelta
+      },
+      {
+        label: "Active Days",
+        value: `${activeDays}`,
+        unit: "days",
+        badge: "consistency",
+        delta: daysDelta
+      },
+      {
+        label: "Categories",
+        value: `${uniqueCategories}`,
+        unit: "types",
+        badge: "active",
+        delta: null
+      },
+      {
+        label: "Daily Avg",
+        value: avgHours,
+        unit: "hrs/day",
+        badge: "pace",
+        delta: null
+      }
     ];
     for (const m2 of metrics) {
       const card = grid.createEl("div", { cls: "analytics-metric-card" });
-      card.createEl("div", { text: m2.label, cls: "analytics-metric-title" });
+      const topRow = card.createEl("div", { cls: "analytics-metric-top-row" });
+      topRow.createEl("div", { text: m2.label, cls: "analytics-metric-title" });
+      if (m2.delta && this.currentRange !== "all") {
+        const deltaEl = topRow.createEl("span", {
+          text: m2.delta.text,
+          cls: `analytics-metric-delta ${m2.delta.positive ? "delta-up" : m2.delta.neutral ? "delta-neutral" : "delta-down"}`
+        });
+        deltaEl.setAttribute("aria-label", "vs previous period");
+      }
       const row = card.createEl("div", { cls: "analytics-metric-value-row" });
       const val = row.createEl("div", { text: m2.value, cls: "analytics-metric-value" });
       val.createEl("span", { text: m2.unit });
       card.createEl("div", { text: m2.badge, cls: "analytics-metric-badge" });
     }
   }
+  /**
+   * Re-renders strictly the Activity Feed element in-place to preserve view scroll position
+   */
+  renderActivityFeedInPlace(allActivities) {
+    if (!this.feedCardEl)
+      return;
+    const card = this.feedCardEl;
+    card.empty();
+    const header = card.createEl("div", { cls: "analytics-card-header" });
+    const titleArea = header.createEl("div", { cls: "analytics-title-area-compact" });
+    titleArea.createEl("div", { text: "Activity Feed", cls: "analytics-card-title" });
+    const todayIso = this.getDateISO(0);
+    const todayActivities = allActivities.filter((a) => a.date === todayIso);
+    let targetDateIso = null;
+    let isFallbackMode = false;
+    if (this.feedDayOffset === 0 && todayActivities.length === 0) {
+      isFallbackMode = true;
+    } else if (this.feedDayOffset !== null) {
+      targetDateIso = this.getDateISO(this.feedDayOffset);
+    }
+    const controls = header.createEl("div", { cls: "feed-header-controls" });
+    const navGroup = controls.createEl("div", { cls: "analytics-pill-group" });
+    const prevDayBtn = navGroup.createEl("button", {
+      text: "\u2039",
+      cls: "analytics-pill-btn",
+      attr: { "aria-label": "Previous Day" }
+    });
+    prevDayBtn.addEventListener("click", () => {
+      var _a;
+      if (isFallbackMode) {
+        this.feedDayOffset = 1;
+      } else {
+        this.feedDayOffset = ((_a = this.feedDayOffset) != null ? _a : 0) + 1;
+      }
+      this.feedPageIndex = 0;
+      this.renderActivityFeedInPlace(allActivities);
+    });
+    let labelText = "";
+    if (isFallbackMode) {
+      labelText = "Latest Activities";
+    } else if (this.feedDayOffset === 0) {
+      labelText = `Today (${targetDateIso})`;
+    } else if (this.feedDayOffset === 1) {
+      labelText = `Yesterday (${targetDateIso})`;
+    } else {
+      labelText = targetDateIso || "";
+    }
+    navGroup.createEl("span", {
+      text: labelText,
+      cls: "trend-nav-current-label"
+    });
+    const isAtToday = this.feedDayOffset === 0;
+    const nextDayBtn = navGroup.createEl("button", {
+      text: "\u203A",
+      cls: `analytics-pill-btn ${isAtToday ? "is-disabled" : ""}`,
+      attr: { "aria-label": "Next Day" }
+    });
+    if (!isAtToday) {
+      nextDayBtn.addEventListener("click", () => {
+        if (this.feedDayOffset !== null && this.feedDayOffset > 0) {
+          this.feedDayOffset -= 1;
+          this.feedPageIndex = 0;
+          this.renderActivityFeedInPlace(allActivities);
+        }
+      });
+    }
+    const todayBtn = controls.createEl("button", {
+      text: "Today",
+      cls: `analytics-pill-btn ${this.feedDayOffset === 0 && !isFallbackMode ? "is-active" : ""}`
+    });
+    todayBtn.addEventListener("click", () => {
+      this.feedDayOffset = 0;
+      this.feedPageIndex = 0;
+      this.renderActivityFeedInPlace(allActivities);
+    });
+    let feedList = [];
+    if (isFallbackMode) {
+      feedList = [...allActivities].filter((a) => a.date).sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    } else {
+      feedList = allActivities.filter((a) => a.date === targetDateIso).sort((a, b) => b.duration - a.duration);
+    }
+    if (feedList.length === 0) {
+      card.createEl("p", {
+        text: `No activities logged for ${labelText}.`,
+        cls: "analytics-empty-message"
+      });
+      return;
+    }
+    const totalItems = feedList.length;
+    const totalPages = Math.ceil(totalItems / this.FEED_PAGE_SIZE);
+    const startIdx = this.feedPageIndex * this.FEED_PAGE_SIZE;
+    const pagedList = feedList.slice(startIdx, startIdx + this.FEED_PAGE_SIZE);
+    const tableWrapper = card.createEl("div", { cls: "vitals-table-wrapper" });
+    const table = tableWrapper.createEl("table", { cls: "vitals-recent-table" });
+    const thead = table.createEl("thead");
+    const hRow = thead.createEl("tr");
+    hRow.createEl("th", { text: "Date" });
+    hRow.createEl("th", { text: "Note / Session" });
+    hRow.createEl("th", { text: "Category" });
+    hRow.createEl("th", { text: "Duration" });
+    hRow.createEl("th", { text: "Project" });
+    const tbody = table.createEl("tbody");
+    for (const act of pagedList) {
+      const row = tbody.createEl("tr");
+      row.createEl("td", { text: act.date || "-", cls: "vitals-td-date" });
+      const noteCell = row.createEl("td", { cls: "vitals-td-note" });
+      const link = noteCell.createEl("a", { text: act.title, cls: "vitals-note-link" });
+      link.addEventListener("click", async () => {
+        const file = this.app.vault.getAbstractFileByPath(act.id);
+        if (file instanceof import_obsidian2.TFile) {
+          const leaf = this.app.workspace.getLeaf(false);
+          await leaf.openFile(file);
+        }
+      });
+      const catCell = row.createEl("td");
+      const badge = catCell.createEl("span", { text: act.type, cls: "vitals-item-badge" });
+      if (this.settings.categoryColors[act.type]) {
+        badge.style.color = this.settings.categoryColors[act.type];
+        badge.style.borderColor = this.settings.categoryColors[act.type];
+        badge.style.backgroundColor = `${this.settings.categoryColors[act.type]}1a`;
+      }
+      const durHours = (act.duration / 60).toFixed(1);
+      const durCell = row.createEl("td", { cls: "vitals-td-dur" });
+      durCell.createEl("span", { text: `${durHours}h ` });
+      durCell.createEl("small", { text: `(${act.duration}m)` });
+      row.createEl("td", { text: act.project ? `@${act.project}` : "-", cls: "vitals-td-proj" });
+    }
+    if (totalItems > this.FEED_PAGE_SIZE) {
+      const footer = card.createEl("div", { cls: "feed-pagination-footer" });
+      const prevPageBtn = footer.createEl("button", {
+        text: "\u2039 15 Earlier",
+        cls: `analytics-pill-btn ${this.feedPageIndex + 1 >= totalPages ? "is-disabled" : ""}`
+      });
+      prevPageBtn.addEventListener("click", () => {
+        if (this.feedPageIndex + 1 < totalPages) {
+          this.feedPageIndex += 1;
+          this.renderActivityFeedInPlace(allActivities);
+        }
+      });
+      footer.createEl("span", {
+        text: `Showing ${startIdx + 1}\u2013${Math.min(startIdx + this.FEED_PAGE_SIZE, totalItems)} of ${totalItems}`,
+        cls: "feed-page-indicator"
+      });
+      const nextPageBtn = footer.createEl("button", {
+        text: "15 Later \u203A",
+        cls: `analytics-pill-btn ${this.feedPageIndex === 0 ? "is-disabled" : ""}`
+      });
+      nextPageBtn.addEventListener("click", () => {
+        if (this.feedPageIndex > 0) {
+          this.feedPageIndex -= 1;
+          this.renderActivityFeedInPlace(allActivities);
+        }
+      });
+    }
+  }
+  getDateISO(offsetDays) {
+    const d = /* @__PURE__ */ new Date();
+    d.setDate(d.getDate() - offsetDays);
+    return this.formatDateISO(d);
+  }
+  calculateDelta(current, previous) {
+    if (previous === 0) {
+      if (current === 0)
+        return { text: "0%", positive: false, neutral: true };
+      return { text: "+100%", positive: true, neutral: false };
+    }
+    const diff = current - previous;
+    const percent = Math.round(diff / previous * 100);
+    if (percent === 0)
+      return { text: "0%", positive: false, neutral: true };
+    const text = percent > 0 ? `+${percent}%` : `${percent}%`;
+    return { text, positive: percent > 0, neutral: false };
+  }
+  getPreviousPeriodActivities(activities, range, offset) {
+    const now = /* @__PURE__ */ new Date();
+    if (range === "day") {
+      const prevDate = new Date(now);
+      prevDate.setDate(now.getDate() - (offset + 1));
+      const prevIso = this.formatDateISO(prevDate);
+      return activities.filter((a) => a.date === prevIso);
+    }
+    if (range === "30d") {
+      const past30 = new Date(now);
+      past30.setDate(now.getDate() - 30);
+      const past60 = new Date(now);
+      past60.setDate(now.getDate() - 60);
+      return activities.filter((a) => {
+        if (!a.date)
+          return false;
+        const d = /* @__PURE__ */ new Date(a.date + "T00:00:00");
+        return d >= past60 && d < past30;
+      });
+    }
+    if (range === "month") {
+      return this.filterActivities(activities, "month", offset + 1);
+    }
+    if (range === "year") {
+      return this.filterActivities(activities, "year", offset + 1);
+    }
+    return [];
+  }
+  exportCSV(activities) {
+    if (activities.length === 0) {
+      new import_obsidian2.Notice("No activities available to export.");
+      return;
+    }
+    const headers = ["Title", "Category", "Date", "Duration (Minutes)", "Duration (Hours)", "Project", "File Path"];
+    const rows = activities.map((a) => [
+      `"${a.title.replace(/"/g, '""')}"`,
+      `"${a.type.replace(/"/g, '""')}"`,
+      `"${a.date || ""}"`,
+      a.duration,
+      (a.duration / 60).toFixed(2),
+      `"${(a.project || "").replace(/"/g, '""')}"`,
+      `"${a.id.replace(/"/g, '""')}"`
+    ]);
+    const csvContent = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    this.downloadFile(csvContent, `vitals-export-${this.currentRange}.csv`, "text/csv;charset=utf-8;");
+    new import_obsidian2.Notice("Exported activities to CSV.");
+  }
+  exportMarkdown(activities) {
+    if (activities.length === 0) {
+      new import_obsidian2.Notice("No activities available to export.");
+      return;
+    }
+    const totalMinutes = activities.reduce((sum, a) => sum + a.duration, 0);
+    const totalHours = (totalMinutes / 60).toFixed(1);
+    let md = `# Vitals Activity Export (${this.currentRange.toUpperCase()})
+
+`;
+    md += `**Total Logged Time:** ${totalHours} hrs (${totalMinutes} mins)  
+`;
+    md += `**Total Notes:** ${activities.length}  
+
+`;
+    md += `| Date | Title | Category | Duration | Project |
+`;
+    md += `| :--- | :--- | :--- | :--- | :--- |
+`;
+    for (const a of activities) {
+      const dur = `${(a.duration / 60).toFixed(1)}h (${a.duration}m)`;
+      md += `| ${a.date || "N/A"} | [[${a.title}]] | ${a.type} | ${dur} | ${a.project || "-"} |
+`;
+    }
+    this.downloadFile(md, `vitals-summary-${this.currentRange}.md`, "text/markdown;charset=utf-8;");
+    new import_obsidian2.Notice("Exported activities to Markdown.");
+  }
+  downloadFile(content, filename, mime) {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
   getRangePeriodLabel() {
     const now = /* @__PURE__ */ new Date();
-    if (this.currentRange === "month") {
+    if (this.currentRange === "day") {
+      const targetDate = new Date(now);
+      targetDate.setDate(now.getDate() - this.rangeOffset);
+      if (this.rangeOffset === 0) {
+        return `Today (${this.formatDisplayDate(targetDate)})`;
+      }
+      return `${this.formatDisplayDate(targetDate)}`;
+    } else if (this.currentRange === "month") {
       const targetDate = new Date(now.getFullYear(), now.getMonth() - this.rangeOffset, 1);
       return targetDate.toLocaleDateString("en-US", { month: "short", year: "numeric" });
     } else if (this.currentRange === "year") {
@@ -13643,6 +14153,12 @@ var DashboardView = class extends import_obsidian.ItemView {
     const now = /* @__PURE__ */ new Date();
     if (range === "all") {
       return activities;
+    }
+    if (range === "day") {
+      const targetDate = new Date(now);
+      targetDate.setDate(now.getDate() - offset);
+      const iso = this.formatDateISO(targetDate);
+      return activities.filter((a) => a.date === iso);
     }
     if (range === "30d") {
       const past30 = new Date(now);
@@ -13678,48 +14194,330 @@ var DashboardView = class extends import_obsidian.ItemView {
     }
     return activities;
   }
+  formatDateISO(d) {
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  formatDisplayDate(d) {
+    const dd = String(d.getDate()).padStart(2, "0");
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const yyyy = d.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  }
   async onClose() {
     WeeklyProgressView.destroy();
     CategoryChartView.destroy();
+    this.feedCardEl = null;
+  }
+};
+
+// src/core/DataEngine.ts
+var DataEngine = class {
+  constructor(app, settings) {
+    this.app = app;
+    this.settings = settings;
+  }
+  updateSettings(settings) {
+    this.settings = settings;
+  }
+  getActivities() {
+    const files = this.app.vault.getMarkdownFiles();
+    const activities = [];
+    const includedList = this.settings.includedFolders.split(",").map((f) => f.trim()).filter((f) => f.length > 0);
+    const excludedList = this.settings.excludedFolders.split(",").map((f) => f.trim()).filter((f) => f.length > 0);
+    for (const file of files) {
+      if (includedList.length > 0) {
+        const isIncluded = includedList.some((inc) => file.path.startsWith(inc + "/") || file.path === inc);
+        if (!isIncluded)
+          continue;
+      }
+      if (excludedList.length > 0) {
+        const isExcluded = excludedList.some((exc) => file.path.startsWith(exc + "/") || file.path === exc);
+        if (isExcluded)
+          continue;
+      }
+      const cache = this.app.metadataCache.getFileCache(file);
+      if (!cache || !cache.frontmatter)
+        continue;
+      const fm = cache.frontmatter;
+      const rawDuration = this.findFrontmatterValue(fm, [
+        "duration",
+        "Duration",
+        "DURATION",
+        "spent",
+        "Spent",
+        "SPENT"
+      ]);
+      if (rawDuration === void 0 || rawDuration === null)
+        continue;
+      const parsedMinutes = this.parseDurationToMinutes(rawDuration);
+      if (parsedMinutes <= 0)
+        continue;
+      const rawType = this.findFrontmatterValue(fm, ["type", "Type", "TYPE", "category", "Category", "CATEGORY"]);
+      const normalizedType = this.cleanType(rawType) || "Unknown";
+      const rawDate = this.findFrontmatterValue(fm, ["date", "Date", "DATE", "created", "Created"]);
+      const normalizedDate = this.resolveDate(rawDate, file);
+      const rawTime = this.findFrontmatterValue(fm, ["time", "Time", "start", "Start", "start_time", "startTime"]);
+      const parsedHour = this.resolveHour(rawTime, rawDate, file);
+      const rawProject = this.findFrontmatterValue(fm, ["project", "Project", "PROJECT"]);
+      activities.push({
+        id: file.path,
+        title: file.basename,
+        type: normalizedType,
+        date: normalizedDate,
+        duration: parsedMinutes,
+        project: rawProject ? String(rawProject).trim() : void 0,
+        hour: parsedHour
+      });
+    }
+    return activities;
+  }
+  findFrontmatterValue(frontmatter, candidates) {
+    const keys = Object.keys(frontmatter);
+    for (const candidate of candidates) {
+      const matchedKey = keys.find((k) => k.trim().toLowerCase() === candidate.trim().toLowerCase());
+      if (matchedKey !== void 0 && frontmatter[matchedKey] !== void 0 && frontmatter[matchedKey] !== null) {
+        return frontmatter[matchedKey];
+      }
+    }
+    return void 0;
+  }
+  cleanType(rawType) {
+    if (Array.isArray(rawType) && rawType.length > 0) {
+      const str = String(rawType[0]).replace(/^#/, "").trim();
+      return str.length > 0 ? str : null;
+    }
+    if (typeof rawType === "string") {
+      const str = rawType.replace(/^#/, "").trim();
+      return str.length > 0 ? str : null;
+    }
+    return null;
+  }
+  resolveDate(rawDate, file) {
+    if (rawDate) {
+      if (typeof rawDate === "string") {
+        const trimmed = rawDate.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+          return trimmed;
+        }
+        const parsed = new Date(trimmed);
+        if (!isNaN(parsed.getTime())) {
+          return parsed.toISOString().split("T")[0];
+        }
+      } else if (rawDate instanceof Date) {
+        return rawDate.toISOString().split("T")[0];
+      }
+    }
+    const fallbackDate = new Date(file.stat.ctime);
+    return fallbackDate.toISOString().split("T")[0];
+  }
+  resolveHour(rawTime, rawDate, file) {
+    if (typeof rawTime === "string") {
+      const match = rawTime.trim().match(/^(\d{1,2}):(\d{2})/);
+      if (match) {
+        const h = parseInt(match[1], 10);
+        if (h >= 0 && h <= 23)
+          return h;
+      }
+    } else if (typeof rawTime === "number" && rawTime >= 0 && rawTime <= 23) {
+      return Math.floor(rawTime);
+    }
+    if (typeof rawDate === "string" && rawDate.includes("T")) {
+      const d = new Date(rawDate);
+      if (!isNaN(d.getTime()))
+        return d.getHours();
+    }
+    return new Date(file.stat.ctime).getHours();
+  }
+  parseDurationToMinutes(val) {
+    if (typeof val === "number") {
+      return !isNaN(val) && val > 0 ? Math.round(val) : 0;
+    }
+    if (Array.isArray(val)) {
+      let total = 0;
+      for (const item of val) {
+        total += this.parseDurationToMinutes(item);
+      }
+      return Math.round(total);
+    }
+    if (typeof val === "string") {
+      const text = val.trim();
+      if (!text)
+        return 0;
+      let totalMinutes = 0;
+      let matchedAny = false;
+      const hourRegex = /(\d+(?:\.\d+)?)\s*(?:h\b|hr\b|hrs\b|hours?\b|[hH])/gi;
+      let hourMatch;
+      while ((hourMatch = hourRegex.exec(text)) !== null) {
+        const hours = parseFloat(hourMatch[1]);
+        if (!isNaN(hours)) {
+          totalMinutes += hours * 60;
+          matchedAny = true;
+        }
+      }
+      const minRegex = /(\d+(?:\.\d+)?)\s*(?:m\b|min\b|mins\b|minutes?\b|[mM])/gi;
+      let minMatch;
+      while ((minMatch = minRegex.exec(text)) !== null) {
+        const mins = parseFloat(minMatch[1]);
+        if (!isNaN(mins)) {
+          totalMinutes += mins;
+          matchedAny = true;
+        }
+      }
+      if (matchedAny) {
+        return Math.round(totalMinutes);
+      }
+      const bareNumberMatch = text.match(/\b\d+(?:\.\d+)?\b/);
+      if (bareNumberMatch) {
+        const num = parseFloat(bareNumberMatch[0]);
+        if (!isNaN(num) && num > 0) {
+          return Math.round(num);
+        }
+      }
+    }
+    return 0;
+  }
+};
+
+// src/settings/VitalsSettings.ts
+var import_obsidian3 = require("obsidian");
+var DEFAULT_SETTINGS = {
+  themePreset: "vitals-stealth",
+  includedFolders: "",
+  excludedFolders: "Templates, Archive",
+  categoryColors: {
+    Writing: "#10b981",
+    Reading: "#38bdf8",
+    Coding: "#818cf8",
+    Research: "#f59e0b",
+    Unknown: "#64748b"
+  }
+};
+var VitalsSettingTab = class extends import_obsidian3.PluginSettingTab {
+  constructor(app, plugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+  display() {
+    const { containerEl } = this;
+    containerEl.empty();
+    containerEl.createEl("h2", { text: "Vitals Settings" });
+    new import_obsidian3.Setting(containerEl).setName("Dashboard Theme").setDesc("Choose the visual appearance and color profile of the dashboard.").addDropdown((dropdown) => {
+      dropdown.addOption("vitals-stealth", "Vitals Stealth (Signature Dark)").addOption("github-dark", "GitHub Dark").addOption("github-light", "GitHub Light").addOption("nord-frost", "Nord Frost").addOption("obsidian-native", "Obsidian Native (Sync with Vault Theme)").setValue(this.plugin.settings.themePreset).onChange(async (val) => {
+        this.plugin.settings.themePreset = val;
+        await this.plugin.saveSettings();
+      });
+    });
+    new import_obsidian3.Setting(containerEl).setName("Included Folders").setDesc("Scan only these folders (comma-separated, e.g., 'Logs, Daily'). Leave empty to scan the entire vault.").addText(
+      (text) => text.setPlaceholder("All folders").setValue(this.plugin.settings.includedFolders).onChange(async (val) => {
+        this.plugin.settings.includedFolders = val;
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian3.Setting(containerEl).setName("Excluded Folders").setDesc("Never scan notes in these folders (comma-separated, e.g., 'Templates, Archive, Drafts').").addText(
+      (text) => text.setPlaceholder("Templates, Archive").setValue(this.plugin.settings.excludedFolders).onChange(async (val) => {
+        this.plugin.settings.excludedFolders = val;
+        await this.plugin.saveSettings();
+      })
+    );
+    containerEl.createEl("h3", { text: "Category Colors" });
+    containerEl.createEl("p", {
+      text: "Assign dedicated colors to ensure categories remain visually consistent across all timeframe views.",
+      cls: "setting-item-description"
+    });
+    const entries = Object.entries(this.plugin.settings.categoryColors);
+    for (const [catName, colorVal] of entries) {
+      new import_obsidian3.Setting(containerEl).setName(catName).addColorPicker((color2) => {
+        color2.setValue(colorVal).onChange(async (newColor) => {
+          this.plugin.settings.categoryColors[catName] = newColor;
+          await this.plugin.saveSettings();
+        });
+      }).addButton((btn) => {
+        btn.setButtonText("Remove").setWarning().onClick(async () => {
+          delete this.plugin.settings.categoryColors[catName];
+          await this.plugin.saveSettings();
+          this.display();
+        });
+      });
+    }
+    let newCategoryName = "";
+    let newCategoryColor = "#2dd4bf";
+    new import_obsidian3.Setting(containerEl).setName("Add Category Color").setDesc("Map a new category name to a custom hex color.").addText(
+      (text) => text.setPlaceholder("e.g. DeepWork").onChange((val) => {
+        newCategoryName = val.trim();
+      })
+    ).addColorPicker(
+      (picker) => picker.setValue(newCategoryColor).onChange((val) => {
+        newCategoryColor = val;
+      })
+    ).addButton(
+      (btn) => btn.setButtonText("Add").setCta().onClick(async () => {
+        if (!newCategoryName)
+          return;
+        this.plugin.settings.categoryColors[newCategoryName] = newCategoryColor;
+        await this.plugin.saveSettings();
+        this.display();
+      })
+    );
   }
 };
 
 // src/main.ts
-var VitalsPlugin = class extends import_obsidian2.Plugin {
+var VitalsPlugin = class extends import_obsidian4.Plugin {
+  constructor() {
+    super(...arguments);
+    this.settings = DEFAULT_SETTINGS;
+  }
   async onload() {
-    this.dataEngine = new DataEngine(this.app);
-    this.registerView(VIEW_TYPE_VITALS, (leaf) => new DashboardView(leaf, this.dataEngine));
-    this.addRibbonIcon("activity", "Open Vitals", () => {
+    await this.loadSettings();
+    this.dataEngine = new DataEngine(this.app, this.settings);
+    this.registerView(DASHBOARD_VIEW_TYPE, (leaf) => {
+      return new DashboardView(leaf, this.dataEngine, this.settings);
+    });
+    this.addRibbonIcon("activity", "Open Vitals Dashboard", () => {
       this.activateView();
     });
     this.addCommand({
-      id: "open-vitals",
+      id: "open-vitals-dashboard",
       name: "Open Dashboard",
       callback: () => {
         this.activateView();
       }
     });
-    console.log("Vitals loaded successfully!");
+    this.addSettingTab(new VitalsSettingTab(this.app, this));
   }
-  async onunload() {
-    console.log("Vitals unloaded.");
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+  }
+  async saveSettings() {
+    await this.saveData(this.settings);
+    this.dataEngine.updateSettings(this.settings);
+    const leaves = this.app.workspace.getLeavesOfType(DASHBOARD_VIEW_TYPE);
+    for (const leaf of leaves) {
+      if (leaf.view instanceof DashboardView) {
+        leaf.view.updateSettings(this.settings);
+      }
+    }
   }
   async activateView() {
     const { workspace } = this.app;
     let leaf = null;
-    const leaves = workspace.getLeavesOfType(VIEW_TYPE_VITALS);
+    const leaves = workspace.getLeavesOfType(DASHBOARD_VIEW_TYPE);
     if (leaves.length > 0) {
       leaf = leaves[0];
     } else {
       leaf = workspace.getLeaf(true);
-      await leaf.setViewState({
-        type: VIEW_TYPE_VITALS,
-        active: true
-      });
+      if (leaf) {
+        await leaf.setViewState({ type: DASHBOARD_VIEW_TYPE, active: true });
+      }
     }
     if (leaf) {
       workspace.revealLeaf(leaf);
     }
+  }
+  onunload() {
   }
 };
 /*! Bundled license information:

@@ -1,33 +1,60 @@
 import { App, TFile } from 'obsidian';
 import { Activity } from '../models/Activity';
+import { VitalsSettings } from '../settings/VitalsSettings';
 
 export class DataEngine {
   private app: App;
+  private settings: VitalsSettings;
 
-  constructor(app: App) {
+  constructor(app: App, settings: VitalsSettings) {
     this.app = app;
+    this.settings = settings;
+  }
+
+  public updateSettings(settings: VitalsSettings): void {
+    this.settings = settings;
   }
 
   public getActivities(): Activity[] {
     const files = this.app.vault.getMarkdownFiles();
     const activities: Activity[] = [];
 
+    const includedList = this.settings.includedFolders
+      .split(',')
+      .map((f) => f.trim())
+      .filter((f) => f.length > 0);
+
+    const excludedList = this.settings.excludedFolders
+      .split(',')
+      .map((f) => f.trim())
+      .filter((f) => f.length > 0);
+
     for (const file of files) {
+      // 1. Folder Whitelist Check
+      if (includedList.length > 0) {
+        const isIncluded = includedList.some((inc) => file.path.startsWith(inc + '/') || file.path === inc);
+        if (!isIncluded) continue;
+      }
+
+      // 2. Folder Blacklist Check
+      if (excludedList.length > 0) {
+        const isExcluded = excludedList.some((exc) => file.path.startsWith(exc + '/') || file.path === exc);
+        if (isExcluded) continue;
+      }
+
       const cache = this.app.metadataCache.getFileCache(file);
       if (!cache || !cache.frontmatter) continue;
 
       const fm = cache.frontmatter;
 
-      // 1. Duration check across case variants and keys
+      // 3. Duration check: only process notes with a duration property
       const rawDuration = this.findFrontmatterValue(fm, [
         'duration',
         'Duration',
         'DURATION',
-        'time',
-        'Time',
-        'TIME',
         'spent',
         'Spent',
+        'SPENT',
       ]);
 
       if (rawDuration === undefined || rawDuration === null) continue;
@@ -35,24 +62,19 @@ export class DataEngine {
       const parsedMinutes = this.parseDurationToMinutes(rawDuration);
       if (parsedMinutes <= 0) continue;
 
-      // 2. Type/Category: property value or folder fallback
-      const rawType = this.findFrontmatterValue(fm, [
-        'type',
-        'Type',
-        'TYPE',
-        'category',
-        'Category',
-        'CATEGORY',
-        'tag',
-        'tags',
-      ]);
-      const normalizedType = this.resolveType(rawType, file);
+      // 4. Type / Category check (Defaults to "Unknown" if missing)
+      const rawType = this.findFrontmatterValue(fm, ['type', 'Type', 'TYPE', 'category', 'Category', 'CATEGORY']);
+      const normalizedType = this.cleanType(rawType) || 'Unknown';
 
-      // 3. Date: ISO format or file creation time fallback
+      // 5. Date check
       const rawDate = this.findFrontmatterValue(fm, ['date', 'Date', 'DATE', 'created', 'Created']);
       const normalizedDate = this.resolveDate(rawDate, file);
 
-      // 4. Project: optional property
+      // 6. Hour extraction (for Time-of-Day Punch Card)
+      const rawTime = this.findFrontmatterValue(fm, ['time', 'Time', 'start', 'Start', 'start_time', 'startTime']);
+      const parsedHour = this.resolveHour(rawTime, rawDate, file);
+
+      // 7. Project check (optional)
       const rawProject = this.findFrontmatterValue(fm, ['project', 'Project', 'PROJECT']);
 
       activities.push({
@@ -62,6 +84,7 @@ export class DataEngine {
         date: normalizedDate,
         duration: parsedMinutes,
         project: rawProject ? String(rawProject).trim() : undefined,
+        hour: parsedHour,
       });
     }
 
@@ -79,22 +102,18 @@ export class DataEngine {
     return undefined;
   }
 
-  private resolveType(rawType: any, file: TFile): string {
-    if (rawType) {
-      if (Array.isArray(rawType) && rawType.length > 0) {
-        return String(rawType[0]).replace(/^#/, '').trim();
-      }
-      const str = String(rawType).trim();
-      if (str.length > 0) {
-        return str.replace(/^#/, '');
-      }
+  private cleanType(rawType: any): string | null {
+    if (Array.isArray(rawType) && rawType.length > 0) {
+      const str = String(rawType[0]).replace(/^#/, '').trim();
+      return str.length > 0 ? str : null;
     }
 
-    if (file.parent && file.parent.name && file.parent.name !== '/' && file.parent.name !== '') {
-      return file.parent.name;
+    if (typeof rawType === 'string') {
+      const str = rawType.replace(/^#/, '').trim();
+      return str.length > 0 ? str : null;
     }
 
-    return 'General';
+    return null;
   }
 
   private resolveDate(rawDate: any, file: TFile): string {
@@ -117,6 +136,25 @@ export class DataEngine {
     return fallbackDate.toISOString().split('T')[0];
   }
 
+  private resolveHour(rawTime: any, rawDate: any, file: TFile): number {
+    if (typeof rawTime === 'string') {
+      const match = rawTime.trim().match(/^(\d{1,2}):(\d{2})/);
+      if (match) {
+        const h = parseInt(match[1], 10);
+        if (h >= 0 && h <= 23) return h;
+      }
+    } else if (typeof rawTime === 'number' && rawTime >= 0 && rawTime <= 23) {
+      return Math.floor(rawTime);
+    }
+
+    if (typeof rawDate === 'string' && rawDate.includes('T')) {
+      const d = new Date(rawDate);
+      if (!isNaN(d.getTime())) return d.getHours();
+    }
+
+    return new Date(file.stat.ctime).getHours();
+  }
+
   public parseDurationToMinutes(val: any): number {
     if (typeof val === 'number') {
       return !isNaN(val) && val > 0 ? Math.round(val) : 0;
@@ -137,7 +175,6 @@ export class DataEngine {
       let totalMinutes = 0;
       let matchedAny = false;
 
-      // Hours: 2H, 2h, 01.08H, 1.5 hrs, 2 hours
       const hourRegex = /(\d+(?:\.\d+)?)\s*(?:h\b|hr\b|hrs\b|hours?\b|[hH])/gi;
       let hourMatch: RegExpExecArray | null;
       while ((hourMatch = hourRegex.exec(text)) !== null) {
@@ -148,7 +185,6 @@ export class DataEngine {
         }
       }
 
-      // Minutes: 80m, 80M, 45min, 15 minutes
       const minRegex = /(\d+(?:\.\d+)?)\s*(?:m\b|min\b|mins\b|minutes?\b|[mM])/gi;
       let minMatch: RegExpExecArray | null;
       while ((minMatch = minRegex.exec(text)) !== null) {
@@ -163,7 +199,6 @@ export class DataEngine {
         return Math.round(totalMinutes);
       }
 
-      // Plain numbers without unit default to minutes
       const bareNumberMatch = text.match(/\b\d+(?:\.\d+)?\b/);
       if (bareNumberMatch) {
         const num = parseFloat(bareNumberMatch[0]);

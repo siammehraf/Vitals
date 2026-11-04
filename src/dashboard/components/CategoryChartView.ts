@@ -1,12 +1,29 @@
-import { Chart, DoughnutController, ArcElement, Tooltip } from 'chart.js';
+import {
+  Chart,
+  DoughnutController,
+  ArcElement,
+  BarController,
+  BarElement,
+  CategoryScale,
+  LinearScale,
+  Tooltip,
+  Legend,
+} from 'chart.js';
 import { Activity } from '../../models/Activity';
 
-Chart.register(DoughnutController, ArcElement, Tooltip);
+Chart.register(DoughnutController, ArcElement, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
+
+export type CategoryViewType = 'ring' | 'bar';
 
 export class CategoryChartView {
   private static chartInstance: Chart | null = null;
+  private static currentViewType: CategoryViewType = 'ring';
 
-  public static render(container: HTMLElement, activities: Activity[]): void {
+  public static render(
+    container: HTMLElement,
+    activities: Activity[],
+    customColors: Record<string, string> = {},
+  ): void {
     if (this.chartInstance) {
       this.chartInstance.destroy();
       this.chartInstance = null;
@@ -16,25 +33,70 @@ export class CategoryChartView {
     const header = card.createEl('div', { cls: 'analytics-card-header' });
     header.createEl('div', { text: 'Category Distribution', cls: 'analytics-card-title' });
 
-    // Aggregate durations by category
+    // Mode Switcher: [ Ring | Bar ]
+    const toggleGroup = header.createEl('div', { cls: 'analytics-pill-group' });
+    const ringBtn = toggleGroup.createEl('button', {
+      text: 'Ring',
+      cls: `analytics-pill-btn ${this.currentViewType === 'ring' ? 'is-active' : ''}`,
+    });
+    const barBtn = toggleGroup.createEl('button', {
+      text: 'Bar',
+      cls: `analytics-pill-btn ${this.currentViewType === 'bar' ? 'is-active' : ''}`,
+    });
+
+    ringBtn.addEventListener('click', () => {
+      if (this.currentViewType === 'ring') return;
+      this.currentViewType = 'ring';
+      ringBtn.addClass('is-active');
+      barBtn.removeClass('is-active');
+      this.rebuildChart(chartWrapper, activities, customColors);
+    });
+
+    barBtn.addEventListener('click', () => {
+      if (this.currentViewType === 'bar') return;
+      this.currentViewType = 'bar';
+      barBtn.addClass('is-active');
+      ringBtn.removeClass('is-active');
+      this.rebuildChart(chartWrapper, activities, customColors);
+    });
+
+    const chartWrapper = card.createEl('div', { cls: 'donut-chart-wrapper' });
+    this.rebuildChart(chartWrapper, activities, customColors);
+  }
+
+  private static rebuildChart(
+    wrapper: HTMLElement,
+    activities: Activity[],
+    customColors: Record<string, string>,
+  ): void {
+    wrapper.empty();
+
+    if (this.chartInstance) {
+      this.chartInstance.destroy();
+      this.chartInstance = null;
+    }
+
     const categoryTotals: Record<string, number> = {};
     for (const a of activities) {
-      const cat = a.type || 'General';
+      const cat = a.type || 'Unknown';
       categoryTotals[cat] = (categoryTotals[cat] || 0) + a.duration;
     }
 
-    const labels = Object.keys(categoryTotals);
-    const dataValues = labels.map((cat) => Number((categoryTotals[cat] / 60).toFixed(1)));
+    const sortedEntries = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
+    const labels = sortedEntries.map(([name]) => name);
+    const dataValues = sortedEntries.map(([, mins]) => Number((mins / 60).toFixed(1)));
 
     if (labels.length === 0 || dataValues.every((v) => v === 0)) {
-      card.createEl('p', { text: 'No activity recorded for this period.', cls: 'analytics-empty-message' });
+      wrapper.createEl('p', {
+        text: 'No activity recorded for this period.',
+        cls: 'analytics-empty-message',
+      });
       return;
     }
 
-    const chartWrapper = card.createEl('div', { cls: 'donut-chart-wrapper' });
-    const canvas = chartWrapper.createEl('canvas');
+    const canvas = wrapper.createEl('canvas');
 
-    const palette = [
+    const fallbackPalette = [
       '#14b8a6', // teal
       '#38bdf8', // bright sky blue
       '#818cf8', // indigo
@@ -44,94 +106,148 @@ export class CategoryChartView {
       '#34d399', // emerald
     ];
 
-    const sliceColors = palette.slice(0, labels.length);
-
-    this.chartInstance = new Chart(canvas, {
-      type: 'doughnut',
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            data: dataValues,
-            backgroundColor: sliceColors,
-            borderColor: '#11141a',
-            borderWidth: 2,
-            borderAlign: 'inner',
-            spacing: 0,
-            hoverOffset: 0,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
-        cutout: '72%',
-        layout: {
-          padding: 6,
-        },
-        plugins: {
-          legend: {
-            display: false,
-          },
-          tooltip: {
-            backgroundColor: 'rgba(15, 23, 42, 0.95)',
-            titleColor: '#f8fafc',
-            bodyColor: '#e2e8f0',
-            borderColor: 'rgba(255, 255, 255, 0.12)',
-            borderWidth: 1,
-            padding: 10,
-            cornerRadius: 8,
-            titleFont: {
-              family: "'Geist Mono', monospace",
-              size: 12,
-              weight: 'bold',
-            },
-            bodyFont: {
-              family: "'Geist Mono', monospace",
-              size: 11,
-            },
-            callbacks: {
-              label: (ctx) => ` ${ctx.label}: ${ctx.parsed} hrs`,
-            },
-          },
-        },
-        elements: {
-          arc: {
-            borderJoinStyle: 'round',
-          },
-        },
-      },
-      plugins: [
-        {
-          id: 'enforceMinArc',
-          beforeUpdate(chart) {
-            const meta = chart.getDatasetMeta(0);
-            if (!meta || !meta.data || meta.data.length <= 1) return;
-
-            const minRadians = 0.09;
-            const total = (meta.controller as any)._getDataset().data.reduce((a: number, b: number) => a + b, 0);
-            if (total === 0) return;
-
-            meta.data.forEach((element: any, i: number) => {
-              const val = Number((chart.data.datasets[0].data as number[])[i]);
-              if (val > 0 && element.circumference !== undefined && element.circumference < minRadians) {
-                element.circumference = minRadians;
-              }
-            });
-          },
-        },
-      ],
+    const sliceColors = labels.map((label, idx) => {
+      return customColors[label] || fallbackPalette[idx % fallbackPalette.length];
     });
 
-    // Native HTML legend
-    const legendContainer = card.createEl('div', { cls: 'donut-html-legend' });
-    labels.forEach((label, idx) => {
-      const item = legendContainer.createEl('div', { cls: 'donut-legend-item' });
-      const dot = item.createEl('span', { cls: 'donut-legend-dot' });
-      dot.style.backgroundColor = sliceColors[idx];
-      item.createEl('span', { text: label });
-    });
+    if (this.currentViewType === 'ring') {
+      this.chartInstance = new Chart(canvas, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              data: dataValues,
+              backgroundColor: sliceColors,
+              borderColor: '#11141a',
+              borderWidth: 2,
+              hoverOffset: 4,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
+          cutout: '72%',
+          layout: {
+            padding: { top: 6, bottom: 8 },
+          },
+          plugins: {
+            legend: {
+              display: true,
+              position: 'bottom',
+              labels: {
+                color: '#e2e8f0',
+                usePointStyle: true,
+                pointStyle: 'rectRounded',
+                boxWidth: 8,
+                boxHeight: 8,
+                padding: 14,
+                font: {
+                  family: "'Geist Mono', ui-monospace, SFMono-Regular, monospace",
+                  size: 11,
+                  weight: 'bold',
+                },
+              },
+            },
+            tooltip: {
+              backgroundColor: 'rgba(15, 23, 42, 0.95)',
+              titleColor: '#f8fafc',
+              bodyColor: '#e2e8f0',
+              borderColor: 'rgba(255, 255, 255, 0.12)',
+              borderWidth: 1,
+              padding: 10,
+              cornerRadius: 8,
+              titleFont: {
+                family: "'Geist Mono', monospace",
+                size: 12,
+                weight: 'bold',
+              },
+              bodyFont: {
+                family: "'Geist Mono', monospace",
+                size: 11,
+              },
+              callbacks: {
+                label: (ctx) => ` ${ctx.label}: ${ctx.parsed} hrs`,
+              },
+            },
+          },
+        },
+      });
+    } else {
+      // Horizontal bar configuration without 'axis' property inside dataset
+      this.chartInstance = new Chart(canvas, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              data: dataValues,
+              backgroundColor: sliceColors,
+              borderRadius: 5,
+              borderSkipped: false,
+              barThickness: 16,
+            },
+          ],
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: 'rgba(15, 23, 42, 0.95)',
+              titleColor: '#f8fafc',
+              bodyColor: '#e2e8f0',
+              borderColor: 'rgba(255, 255, 255, 0.12)',
+              borderWidth: 1,
+              padding: 10,
+              cornerRadius: 8,
+              titleFont: {
+                family: "'Geist Mono', monospace",
+                size: 12,
+                weight: 'bold',
+              },
+              bodyFont: {
+                family: "'Geist Mono', monospace",
+                size: 11,
+              },
+              callbacks: {
+                label: (ctx) => ` ${ctx.parsed.x} hrs`,
+              },
+            },
+          },
+          scales: {
+            x: {
+              beginAtZero: true,
+              grid: { color: 'rgba(148, 163, 184, 0.08)' },
+              ticks: {
+                color: '#64748b',
+                font: {
+                  family: "'Geist Mono', monospace",
+                  size: 10,
+                },
+                callback: (v) => `${v}h`,
+              },
+            },
+            y: {
+              grid: { display: false },
+              ticks: {
+                color: '#e2e8f0',
+                font: {
+                  family: "'Geist Mono', monospace",
+                  size: 11,
+                  weight: 'bold',
+                },
+              },
+            },
+          },
+        },
+      });
+    }
   }
 
   public static destroy(): void {

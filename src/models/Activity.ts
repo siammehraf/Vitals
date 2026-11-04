@@ -2,7 +2,8 @@ export interface Activity {
   id: string;
   title: string;
   type: string;
-  date: string; // ISO format: YYYY-MM-DD
-  duration: number; // Normalized integer minutes
+  date: string;
+  duration: number; // in minutes
   project?: string;
+  hour?: number; // 0 to 23 (for Time-of-Day distribution)
 }

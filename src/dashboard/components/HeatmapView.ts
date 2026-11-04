@@ -1,38 +1,94 @@
+import { App } from 'obsidian';
 import { Activity } from '../../models/Activity';
+import { HeatmapDayModal } from './HeatmapDayModal';
+
+export type HeatmapScope = 'rolling' | number; // "rolling" (last 52w) or specific calendar year (e.g., 2026, 2025)
 
 export class HeatmapView {
-  public static render(container: HTMLElement, activities: Activity[]): void {
-    const existing = container.querySelector('.heatmap-card');
-    if (existing) existing.remove();
+  private static currentScope: HeatmapScope = 'rolling';
 
-    const card = container.createEl('div', { cls: 'analytics-card heatmap-card' });
+  public static render(container: HTMLElement, activities: Activity[], app: App): void {
+    // 1. Locate or create the card element
+    let card = container.querySelector('.heatmap-card') as HTMLElement | null;
+    if (!card) {
+      card = container.createEl('div', { cls: 'analytics-card heatmap-card' });
+    } else {
+      // Clear contents in-place so DOM position remains unchanged
+      card.empty();
+    }
 
-    // Header
+    // 2. Collect available calendar years from logged data
+    const yearsSet = new Set<number>();
+    const currentYear = new Date().getFullYear();
+    yearsSet.add(currentYear);
+
+    for (const a of activities) {
+      if (a.date && a.date.length >= 4) {
+        const y = parseInt(a.date.substring(0, 4), 10);
+        if (!isNaN(y)) yearsSet.add(y);
+      }
+    }
+    const sortedYears = Array.from(yearsSet).sort((a, b) => b - a);
+
+    // 3. Header & Scope Controls
     const header = card.createEl('div', { cls: 'heatmap-header' });
-    header.createEl('div', { text: 'Consistency Heatmap', cls: 'heatmap-title' });
+    const titleArea = header.createEl('div', { cls: 'analytics-title-area-compact' });
+    titleArea.createEl('div', { text: 'Consistency Heatmap', cls: 'heatmap-title' });
 
-    // Floating tooltip container (appended once to the card)
+    const controls = header.createEl('div', { cls: 'analytics-pill-group' });
+    const rollingBtn = controls.createEl('button', {
+      text: 'Last 52W',
+      cls: `analytics-pill-btn ${this.currentScope === 'rolling' ? 'is-active' : ''}`,
+    });
+    rollingBtn.addEventListener('click', () => {
+      if (this.currentScope === 'rolling') return;
+      this.currentScope = 'rolling';
+      HeatmapView.render(container, activities, app);
+    });
+
+    for (const yr of sortedYears) {
+      const yrBtn = controls.createEl('button', {
+        text: `${yr}`,
+        cls: `analytics-pill-btn ${this.currentScope === yr ? 'is-active' : ''}`,
+      });
+      yrBtn.addEventListener('click', () => {
+        if (this.currentScope === yr) return;
+        this.currentScope = yr;
+        HeatmapView.render(container, activities, app);
+      });
+    }
+
     const tooltip = card.createEl('div', { cls: 'heatmap-floating-tooltip' });
 
-    // Grid container
     const gridContainer = card.createEl('div', { cls: 'heatmap-grid-container' });
     const grid = gridContainer.createEl('div', { cls: 'heatmap-grid' });
 
-    // Map activity minutes by ISO date string (YYYY-MM-DD)
-    const minutesMap: Record<string, number> = {};
+    // 4. Map activities by date
+    const dayActivitiesMap: Record<string, Activity[]> = {};
     for (const a of activities) {
       if (a.date) {
-        minutesMap[a.date] = (minutesMap[a.date] || 0) + a.duration;
+        if (!dayActivitiesMap[a.date]) dayActivitiesMap[a.date] = [];
+        dayActivitiesMap[a.date].push(a);
       }
     }
 
-    // Generate grid for past 52 weeks (364 days ending today)
-    const today = new Date();
-    const daysToShow = 52 * 7;
-    const startDate = new Date(today);
-    startDate.setDate(today.getDate() - (daysToShow - 1));
+    // 5. Calculate range depending on active scope
+    let startDate: Date;
+    let daysCount: number;
 
-    for (let i = 0; i < daysToShow; i++) {
+    if (this.currentScope === 'rolling') {
+      const today = new Date();
+      daysCount = 52 * 7;
+      startDate = new Date(today);
+      startDate.setDate(today.getDate() - (daysCount - 1));
+    } else {
+      const year = this.currentScope;
+      startDate = new Date(year, 0, 1);
+      const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+      daysCount = isLeap ? 366 : 365;
+    }
+
+    for (let i = 0; i < daysCount; i++) {
       const cellDate = new Date(startDate);
       cellDate.setDate(startDate.getDate() + i);
 
@@ -41,27 +97,23 @@ export class HeatmapView {
       const dd = String(cellDate.getDate()).padStart(2, '0');
       const iso = `${yyyy}-${mm}-${dd}`;
 
-      const totalMins = minutesMap[iso] || 0;
+      const dayActivities = dayActivitiesMap[iso] || [];
+      const totalMins = dayActivities.reduce((sum, a) => sum + a.duration, 0);
       const level = HeatmapView.getIntensityLevel(totalMins);
       const displayHours = (totalMins / 60).toFixed(1);
 
-      // Do NOT set native 'title' attribute to prevent browser system tooltip overlap
       const cell = grid.createEl('div', {
         cls: `heatmap-cell level-${level}`,
-        attr: {
-          'data-date': iso,
-        },
+        attr: { 'data-date': iso },
       });
 
-      // Smooth custom tooltip positioning
-      cell.addEventListener('mouseenter', (e) => {
+      cell.addEventListener('mouseenter', () => {
         const rect = cell.getBoundingClientRect();
         const cardRect = card.getBoundingClientRect();
 
-        tooltip.textContent = `${iso}: ${displayHours} hrs (${totalMins}m)`;
+        tooltip.textContent = `${iso}: ${displayHours} hrs (${totalMins}m) · Click to view`;
         tooltip.addClass('is-visible');
 
-        // Center tooltip directly above the cell
         const left = rect.left - cardRect.left + rect.width / 2;
         const top = rect.top - cardRect.top - 8;
 
@@ -72,9 +124,13 @@ export class HeatmapView {
       cell.addEventListener('mouseleave', () => {
         tooltip.removeClass('is-visible');
       });
+
+      cell.addEventListener('click', () => {
+        new HeatmapDayModal(app, iso, dayActivities).open();
+      });
     }
 
-    // Footer with legend
+    // 6. Footer Legend
     const footer = card.createEl('div', { cls: 'heatmap-footer' });
     footer.createEl('span', { text: 'Less' });
     const legend = footer.createEl('div', { cls: 'heatmap-legend-scale' });

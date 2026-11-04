@@ -1,54 +1,75 @@
 ﻿import { Plugin, WorkspaceLeaf } from 'obsidian';
+import { DashboardView, DASHBOARD_VIEW_TYPE, VIEW_TYPE_VITALS } from './dashboard/DashboardView';
 import { DataEngine } from './core/DataEngine';
-import { DashboardView, VIEW_TYPE_VITALS } from './dashboard/DashboardView';
+import { VitalsSettings, DEFAULT_SETTINGS, VitalsSettingTab } from './settings/VitalsSettings';
 
 export default class VitalsPlugin extends Plugin {
-  public dataEngine!: DataEngine;
+  public settings: VitalsSettings = DEFAULT_SETTINGS;
+  private dataEngine!: DataEngine;
 
-  async onload() {
-    this.dataEngine = new DataEngine(this.app);
+  public async onload(): Promise<void> {
+    await this.loadSettings();
 
-    // Register the custom Vitals dashboard view
-    this.registerView(VIEW_TYPE_VITALS, (leaf: WorkspaceLeaf) => new DashboardView(leaf, this.dataEngine));
+    this.dataEngine = new DataEngine(this.app, this.settings);
 
-    // Add ribbon icon on the left bar
-    this.addRibbonIcon('activity', 'Open Vitals', () => {
+    // Register View
+    this.registerView(DASHBOARD_VIEW_TYPE, (leaf: WorkspaceLeaf) => {
+      return new DashboardView(leaf, this.dataEngine, this.settings);
+    });
+
+    // Ribbon Icon
+    this.addRibbonIcon('activity', 'Open Vitals Dashboard', () => {
       this.activateView();
     });
 
-    // Add command to Obsidian Command Palette (Ctrl+P)
+    // Command
     this.addCommand({
-      id: 'open-vitals',
+      id: 'open-vitals-dashboard',
       name: 'Open Dashboard',
       callback: () => {
         this.activateView();
       },
     });
 
-    console.log('Vitals loaded successfully!');
+    // Settings Tab
+    this.addSettingTab(new VitalsSettingTab(this.app, this));
   }
 
-  async onunload() {
-    console.log('Vitals unloaded.');
+  public async loadSettings(): Promise<void> {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
   }
 
-  async activateView() {
+  public async saveSettings(): Promise<void> {
+    await this.saveData(this.settings);
+    this.dataEngine.updateSettings(this.settings);
+
+    // Refresh any open dashboard leaves
+    const leaves = this.app.workspace.getLeavesOfType(DASHBOARD_VIEW_TYPE);
+    for (const leaf of leaves) {
+      if (leaf.view instanceof DashboardView) {
+        leaf.view.updateSettings(this.settings);
+      }
+    }
+  }
+
+  public async activateView(): Promise<void> {
     const { workspace } = this.app;
     let leaf: WorkspaceLeaf | null = null;
-    const leaves = workspace.getLeavesOfType(VIEW_TYPE_VITALS);
+    const leaves = workspace.getLeavesOfType(DASHBOARD_VIEW_TYPE);
 
     if (leaves.length > 0) {
       leaf = leaves[0];
     } else {
       leaf = workspace.getLeaf(true);
-      await leaf.setViewState({
-        type: VIEW_TYPE_VITALS,
-        active: true,
-      });
+      if (leaf) {
+        await leaf.setViewState({ type: DASHBOARD_VIEW_TYPE, active: true });
+      }
     }
 
     if (leaf) {
       workspace.revealLeaf(leaf);
     }
   }
+
+  public onunload(): void {}
 }
