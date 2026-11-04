@@ -1,0 +1,31 @@
+{
+  "name": "vitals",
+  "version": "1.0.0",
+  "description": "Obsidian plugin to visualize activity, study, and project vitals from note frontmatter.",
+  "main": "main.js",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "node esbuild.config.mjs production"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "analytics",
+    "dashboard",
+    "productivity",
+    "heatmap"
+  ],
+  "author": "Siam Mehraf",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "builtin-modules": "3.3.0",
+    "esbuild": "0.20.2",
+    "obsidian": "latest",
+    "tslib": "2.6.2",
+    "typescript": "^5.4.0"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.2"
+  }
+}
