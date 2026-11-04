@@ -36,194 +36,217 @@ var DataEngine = class {
     this.app = app;
   }
   getActivities() {
-    const activities = [];
     const files = this.app.vault.getMarkdownFiles();
+    const activities = [];
     for (const file of files) {
       const cache = this.app.metadataCache.getFileCache(file);
-      const frontmatter = cache == null ? void 0 : cache.frontmatter;
-      if (frontmatter && frontmatter.type && frontmatter.duration !== void 0) {
-        const rawDate = frontmatter.date ? String(frontmatter.date).trim() : "";
-        const durationNum = Number(frontmatter.duration);
-        if (!isNaN(durationNum) && durationNum > 0) {
-          activities.push({
-            filePath: file.path,
-            type: String(frontmatter.type).trim(),
-            date: rawDate,
-            duration: durationNum,
-            tags: Array.isArray(frontmatter.tags) ? frontmatter.tags : frontmatter.tags ? [String(frontmatter.tags)] : [],
-            project: frontmatter.project ? String(frontmatter.project).trim() : void 0,
-            notes: frontmatter.notes ? String(frontmatter.notes).trim() : void 0
-          });
+      if (!cache || !cache.frontmatter)
+        continue;
+      const fm = cache.frontmatter;
+      const rawDuration = this.findFrontmatterValue(fm, [
+        "duration",
+        "Duration",
+        "DURATION",
+        "time",
+        "Time",
+        "TIME",
+        "spent",
+        "Spent"
+      ]);
+      if (rawDuration === void 0 || rawDuration === null)
+        continue;
+      const parsedMinutes = this.parseDurationToMinutes(rawDuration);
+      if (parsedMinutes <= 0)
+        continue;
+      const rawType = this.findFrontmatterValue(fm, [
+        "type",
+        "Type",
+        "TYPE",
+        "category",
+        "Category",
+        "CATEGORY",
+        "tag",
+        "tags"
+      ]);
+      const normalizedType = this.resolveType(rawType, file);
+      const rawDate = this.findFrontmatterValue(fm, ["date", "Date", "DATE", "created", "Created"]);
+      const normalizedDate = this.resolveDate(rawDate, file);
+      const rawProject = this.findFrontmatterValue(fm, ["project", "Project", "PROJECT"]);
+      activities.push({
+        id: file.path,
+        title: file.basename,
+        type: normalizedType,
+        date: normalizedDate,
+        duration: parsedMinutes,
+        project: rawProject ? String(rawProject).trim() : void 0
+      });
+    }
+    return activities;
+  }
+  findFrontmatterValue(frontmatter, candidates) {
+    const keys = Object.keys(frontmatter);
+    for (const candidate of candidates) {
+      const matchedKey = keys.find((k) => k.trim().toLowerCase() === candidate.trim().toLowerCase());
+      if (matchedKey !== void 0 && frontmatter[matchedKey] !== void 0 && frontmatter[matchedKey] !== null) {
+        return frontmatter[matchedKey];
+      }
+    }
+    return void 0;
+  }
+  resolveType(rawType, file) {
+    if (rawType) {
+      if (Array.isArray(rawType) && rawType.length > 0) {
+        return String(rawType[0]).replace(/^#/, "").trim();
+      }
+      const str = String(rawType).trim();
+      if (str.length > 0) {
+        return str.replace(/^#/, "");
+      }
+    }
+    if (file.parent && file.parent.name && file.parent.name !== "/" && file.parent.name !== "") {
+      return file.parent.name;
+    }
+    return "General";
+  }
+  resolveDate(rawDate, file) {
+    if (rawDate) {
+      if (typeof rawDate === "string") {
+        const trimmed = rawDate.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+          return trimmed;
+        }
+        const parsed = new Date(trimmed);
+        if (!isNaN(parsed.getTime())) {
+          return parsed.toISOString().split("T")[0];
+        }
+      } else if (rawDate instanceof Date) {
+        return rawDate.toISOString().split("T")[0];
+      }
+    }
+    const fallbackDate = new Date(file.stat.ctime);
+    return fallbackDate.toISOString().split("T")[0];
+  }
+  parseDurationToMinutes(val) {
+    if (typeof val === "number") {
+      return !isNaN(val) && val > 0 ? Math.round(val) : 0;
+    }
+    if (Array.isArray(val)) {
+      let total = 0;
+      for (const item of val) {
+        total += this.parseDurationToMinutes(item);
+      }
+      return Math.round(total);
+    }
+    if (typeof val === "string") {
+      const text = val.trim();
+      if (!text)
+        return 0;
+      let totalMinutes = 0;
+      let matchedAny = false;
+      const hourRegex = /(\d+(?:\.\d+)?)\s*(?:h\b|hr\b|hrs\b|hours?\b|[hH])/gi;
+      let hourMatch;
+      while ((hourMatch = hourRegex.exec(text)) !== null) {
+        const hours = parseFloat(hourMatch[1]);
+        if (!isNaN(hours)) {
+          totalMinutes += hours * 60;
+          matchedAny = true;
+        }
+      }
+      const minRegex = /(\d+(?:\.\d+)?)\s*(?:m\b|min\b|mins\b|minutes?\b|[mM])/gi;
+      let minMatch;
+      while ((minMatch = minRegex.exec(text)) !== null) {
+        const mins = parseFloat(minMatch[1]);
+        if (!isNaN(mins)) {
+          totalMinutes += mins;
+          matchedAny = true;
+        }
+      }
+      if (matchedAny) {
+        return Math.round(totalMinutes);
+      }
+      const bareNumberMatch = text.match(/\b\d+(?:\.\d+)?\b/);
+      if (bareNumberMatch) {
+        const num = parseFloat(bareNumberMatch[0]);
+        if (!isNaN(num) && num > 0) {
+          return Math.round(num);
         }
       }
     }
-    return activities;
+    return 0;
   }
 };
 
 // src/dashboard/DashboardView.ts
 var import_obsidian = require("obsidian");
 
-// src/core/StatisticsEngine.ts
-var StatisticsEngine = class {
-  static filterActivities(activities, range) {
-    if (range === "all")
-      return activities;
-    const now = /* @__PURE__ */ new Date();
-    return activities.filter((act) => {
-      if (!act.date)
-        return false;
-      const actDate = /* @__PURE__ */ new Date(act.date + "T00:00:00");
-      if (isNaN(actDate.getTime()))
-        return false;
-      switch (range) {
-        case "7d": {
-          const limit = new Date(now);
-          limit.setDate(limit.getDate() - 7);
-          return actDate >= limit;
-        }
-        case "30d": {
-          const limit = new Date(now);
-          limit.setDate(limit.getDate() - 30);
-          return actDate >= limit;
-        }
-        case "month": {
-          return actDate.getFullYear() === now.getFullYear() && actDate.getMonth() === now.getMonth();
-        }
-        case "prev_month": {
-          const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-          return actDate.getFullYear() === prevMonthDate.getFullYear() && actDate.getMonth() === prevMonthDate.getMonth();
-        }
-        case "year": {
-          return actDate.getFullYear() === now.getFullYear();
-        }
-        case "prev_year": {
-          return actDate.getFullYear() === now.getFullYear() - 1;
-        }
-        default:
-          return true;
-      }
-    });
-  }
-  static calculateOverall(activities) {
-    let totalMinutes = 0;
-    const uniqueDays = /* @__PURE__ */ new Set();
-    const categoryMap = /* @__PURE__ */ new Map();
-    for (const act of activities) {
-      totalMinutes += act.duration;
-      if (act.date) {
-        uniqueDays.add(act.date);
-      }
-      const cat = act.type || "Uncategorized";
-      const current = categoryMap.get(cat) || { minutes: 0, count: 0 };
-      current.minutes += act.duration;
-      current.count += 1;
-      categoryMap.set(cat, current);
-    }
-    const categories = [];
-    for (const [category, data] of categoryMap.entries()) {
-      const percentage = totalMinutes > 0 ? data.minutes / totalMinutes * 100 : 0;
-      categories.push({
-        category,
-        totalMinutes: data.minutes,
-        totalHours: (data.minutes / 60).toFixed(1),
-        sessionCount: data.count,
-        percentage: Number(percentage.toFixed(1))
-      });
-    }
-    categories.sort((a, b) => b.totalMinutes - a.totalMinutes);
-    return {
-      totalMinutes,
-      totalHours: (totalMinutes / 60).toFixed(1),
-      totalSessions: activities.length,
-      activeDaysCount: uniqueDays.size,
-      categories
-    };
-  }
-  static getActivitiesByCategory(activities, category) {
-    return activities.filter((act) => act.type.toLowerCase() === category.toLowerCase());
-  }
-};
-
 // src/dashboard/components/HeatmapView.ts
 var HeatmapView = class _HeatmapView {
-  static render(container, activities, selectedYear, onYearChange) {
-    const availableYears = /* @__PURE__ */ new Set();
-    const currentYear = (/* @__PURE__ */ new Date()).getFullYear();
-    availableYears.add(currentYear);
-    availableYears.add(currentYear - 1);
-    for (const act of activities) {
-      if (act.date) {
-        const y = parseInt(act.date.substring(0, 4), 10);
-        if (!isNaN(y))
-          availableYears.add(y);
-      }
-    }
-    const sortedYears = Array.from(availableYears).sort((a, b) => b - a);
-    const dateMap = /* @__PURE__ */ new Map();
-    let yearTotalSessions = 0;
-    for (const act of activities) {
-      if (act.date && act.date.startsWith(String(selectedYear))) {
-        const current = dateMap.get(act.date) || 0;
-        dateMap.set(act.date, current + act.duration);
-        yearTotalSessions++;
-      }
-    }
+  static render(container, activities) {
+    const existing = container.querySelector(".heatmap-card");
+    if (existing)
+      existing.remove();
     const card = container.createEl("div", { cls: "analytics-card heatmap-card" });
     const header = card.createEl("div", { cls: "heatmap-header" });
-    header.createEl("div", {
-      text: `${yearTotalSessions} activities in ${selectedYear}`,
-      cls: "heatmap-title"
-    });
-    const yearSelector = header.createEl("div", { cls: "analytics-pill-group" });
-    for (const yr of sortedYears) {
-      const btn = yearSelector.createEl("button", {
-        text: String(yr),
-        cls: `analytics-pill-btn ${yr === selectedYear ? "is-active" : ""}`
-      });
-      btn.addEventListener("click", () => {
-        onYearChange(yr);
-      });
-    }
-    const gridWrapper = card.createEl("div", { cls: "heatmap-grid-container" });
-    const startDate = new Date(selectedYear, 0, 1);
-    const dayOfWeek = startDate.getDay();
-    startDate.setDate(startDate.getDate() - dayOfWeek);
-    const endDate = new Date(selectedYear, 11, 31);
-    const endDayOfWeek = endDate.getDay();
-    endDate.setDate(endDate.getDate() + (6 - endDayOfWeek));
-    const grid = gridWrapper.createEl("div", { cls: "heatmap-grid" });
-    const cursor = new Date(startDate);
-    while (cursor <= endDate) {
-      const dateStr = cursor.toISOString().split("T")[0];
-      const isCurrentYear = cursor.getFullYear() === selectedYear;
-      const minutes = isCurrentYear ? dateMap.get(dateStr) || 0 : 0;
-      const level = isCurrentYear ? _HeatmapView.getIntensityLevel(minutes) : 0;
-      const cell = grid.createEl("div", {
-        cls: `heatmap-cell level-${level} ${!isCurrentYear ? "out-of-bounds" : ""}`
-      });
-      if (isCurrentYear) {
-        const hours = (minutes / 60).toFixed(1);
-        cell.setAttribute("aria-label", `${dateStr}: ${hours}h (${minutes}m)`);
+    header.createEl("div", { text: "Consistency Heatmap", cls: "heatmap-title" });
+    const tooltip = card.createEl("div", { cls: "heatmap-floating-tooltip" });
+    const gridContainer = card.createEl("div", { cls: "heatmap-grid-container" });
+    const grid = gridContainer.createEl("div", { cls: "heatmap-grid" });
+    const minutesMap = {};
+    for (const a of activities) {
+      if (a.date) {
+        minutesMap[a.date] = (minutesMap[a.date] || 0) + a.duration;
       }
-      cursor.setDate(cursor.getDate() + 1);
+    }
+    const today = /* @__PURE__ */ new Date();
+    const daysToShow = 52 * 7;
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - (daysToShow - 1));
+    for (let i = 0; i < daysToShow; i++) {
+      const cellDate = new Date(startDate);
+      cellDate.setDate(startDate.getDate() + i);
+      const yyyy = cellDate.getFullYear();
+      const mm = String(cellDate.getMonth() + 1).padStart(2, "0");
+      const dd = String(cellDate.getDate()).padStart(2, "0");
+      const iso = `${yyyy}-${mm}-${dd}`;
+      const totalMins = minutesMap[iso] || 0;
+      const level = _HeatmapView.getIntensityLevel(totalMins);
+      const displayHours = (totalMins / 60).toFixed(1);
+      const cell = grid.createEl("div", {
+        cls: `heatmap-cell level-${level}`,
+        attr: {
+          "data-date": iso
+        }
+      });
+      cell.addEventListener("mouseenter", (e) => {
+        const rect = cell.getBoundingClientRect();
+        const cardRect = card.getBoundingClientRect();
+        tooltip.textContent = `${iso}: ${displayHours} hrs (${totalMins}m)`;
+        tooltip.addClass("is-visible");
+        const left = rect.left - cardRect.left + rect.width / 2;
+        const top = rect.top - cardRect.top - 8;
+        tooltip.style.left = `${left}px`;
+        tooltip.style.top = `${top}px`;
+      });
+      cell.addEventListener("mouseleave", () => {
+        tooltip.removeClass("is-visible");
+      });
     }
     const footer = card.createEl("div", { cls: "heatmap-footer" });
-    footer.createEl("span", { text: "Less", cls: "heatmap-legend-label" });
-    const legendScale = footer.createEl("div", { cls: "heatmap-legend-scale" });
+    footer.createEl("span", { text: "Less" });
+    const legend = footer.createEl("div", { cls: "heatmap-legend-scale" });
     for (let lvl = 0; lvl <= 4; lvl++) {
-      legendScale.createEl("div", { cls: `heatmap-cell level-${lvl}` });
+      legend.createEl("div", { cls: `heatmap-cell level-${lvl}` });
     }
-    footer.createEl("span", { text: "More", cls: "heatmap-legend-label" });
+    footer.createEl("span", { text: "More" });
   }
   static getIntensityLevel(minutes) {
     if (minutes <= 0)
       return 0;
-    if (minutes < 30)
+    if (minutes <= 45)
       return 1;
-    if (minutes < 60)
+    if (minutes <= 120)
       return 2;
-    if (minutes < 120)
+    if (minutes <= 240)
       return 3;
     return 4;
   }
@@ -13084,89 +13107,6 @@ var TimeSeriesScale = class extends TimeScale {
 __publicField(TimeSeriesScale, "id", "timeseries");
 __publicField(TimeSeriesScale, "defaults", TimeScale.defaults);
 
-// src/dashboard/components/CategoryChartView.ts
-Chart.register(DoughnutController, ArcElement, plugin_tooltip, plugin_legend);
-var CategoryChartView = class {
-  static render(container, categories) {
-    if (this.chartInstance) {
-      this.chartInstance.destroy();
-      this.chartInstance = null;
-    }
-    const card = container.createEl("div", { cls: "analytics-card category-chart-card" });
-    const header = card.createEl("div", { cls: "analytics-card-header" });
-    header.createEl("div", { text: "Category Analysis", cls: "analytics-card-title" });
-    if (categories.length === 0) {
-      card.createEl("p", {
-        text: "No categorized activities in this period.",
-        cls: "analytics-empty-message"
-      });
-      return;
-    }
-    const chartWrapper = card.createEl("div", { cls: "donut-chart-wrapper" });
-    const canvas = chartWrapper.createEl("canvas");
-    const labels = categories.map((c) => c.category);
-    const dataValues = categories.map((c) => c.totalMinutes);
-    const colors2 = ["#ef4444", "#84cc16", "#06b6d4", "#8b5cf6", "#3b82f6", "#f59e0b", "#10b981", "#ec4899"];
-    this.chartInstance = new Chart(canvas, {
-      type: "doughnut",
-      data: {
-        labels,
-        datasets: [
-          {
-            data: dataValues,
-            backgroundColor: colors2.slice(0, categories.length),
-            borderColor: "#11141a",
-            borderWidth: 3,
-            hoverOffset: 6
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        cutout: "68%",
-        plugins: {
-          legend: {
-            position: "bottom",
-            labels: {
-              color: "#94a3b8",
-              font: {
-                family: "'Geist Mono', ui-monospace, monospace",
-                size: 11
-              },
-              usePointStyle: true,
-              pointStyle: "circle",
-              padding: 16
-            }
-          },
-          tooltip: {
-            backgroundColor: "#0f172a",
-            titleColor: "#f8fafc",
-            bodyColor: "#94a3b8",
-            borderColor: "#334155",
-            borderWidth: 1,
-            padding: 10,
-            callbacks: {
-              label: (item) => {
-                const totalMins = Number(item.raw);
-                const hours = (totalMins / 60).toFixed(1);
-                return ` ${hours} hrs (${totalMins} min)`;
-              }
-            }
-          }
-        }
-      }
-    });
-  }
-  static destroy() {
-    if (this.chartInstance) {
-      this.chartInstance.destroy();
-      this.chartInstance = null;
-    }
-  }
-};
-CategoryChartView.chartInstance = null;
-
 // src/dashboard/components/WeeklyProgressView.ts
 Chart.register(
   BarController,
@@ -13186,39 +13126,119 @@ var WeeklyProgressView = class {
       this.chartInstance = null;
     }
     const card = container.createEl("div", { cls: "analytics-card weekly-chart-card" });
+    this.cardElement = card;
     const header = card.createEl("div", { cls: "analytics-card-header" });
-    header.createEl("div", { text: "Activity Trend", cls: "analytics-card-title" });
-    const toggleGroup = header.createEl("div", { cls: "analytics-pill-group" });
+    const titleArea = header.createEl("div", { cls: "analytics-title-area-compact" });
+    titleArea.createEl("div", { text: "Activity Trend", cls: "analytics-card-title" });
+    const controls = header.createEl("div", { cls: "trend-header-controls" });
+    const navGroup = controls.createEl("div", { cls: "analytics-pill-group trend-nav-group" });
+    const prevBtn = navGroup.createEl("button", {
+      text: "\u2039",
+      cls: "analytics-pill-btn trend-nav-arrow",
+      attr: { "aria-label": "Previous" }
+    });
+    prevBtn.addEventListener("click", () => {
+      if (mode === "day") {
+        this.dayOffset += 1;
+      } else {
+        this.weekOffset += 1;
+      }
+      this.updateViewInPlace(activities, mode);
+    });
+    this.labelElement = navGroup.createEl("span", {
+      text: this.getActivePeriodLabel(mode),
+      cls: "trend-nav-current-label"
+    });
+    const isAtCurrent = mode === "day" ? this.dayOffset === 0 : this.weekOffset === 0;
+    const nextBtn = navGroup.createEl("button", {
+      text: "\u203A",
+      cls: `analytics-pill-btn trend-nav-arrow ${isAtCurrent ? "is-disabled" : ""}`,
+      attr: { "aria-label": "Next" }
+    });
+    this.nextBtnElement = nextBtn;
+    nextBtn.addEventListener("click", () => {
+      const currentlyAtEnd = mode === "day" ? this.dayOffset === 0 : this.weekOffset === 0;
+      if (currentlyAtEnd)
+        return;
+      if (mode === "day") {
+        this.dayOffset = Math.max(0, this.dayOffset - 1);
+      } else {
+        this.weekOffset = Math.max(0, this.weekOffset - 1);
+      }
+      this.updateViewInPlace(activities, mode);
+    });
+    const toggleGroup = controls.createEl("div", { cls: "analytics-pill-group" });
     const dayBtn = toggleGroup.createEl("button", {
       text: "Day",
       cls: `analytics-pill-btn ${mode === "day" ? "is-active" : ""}`
     });
-    dayBtn.addEventListener("click", () => onModeChange("day"));
+    dayBtn.addEventListener("click", () => {
+      this.dayOffset = 0;
+      onModeChange("day");
+    });
     const weekBtn = toggleGroup.createEl("button", {
       text: "Week",
       cls: `analytics-pill-btn ${mode === "week" ? "is-active" : ""}`
     });
-    weekBtn.addEventListener("click", () => onModeChange("week"));
+    weekBtn.addEventListener("click", () => {
+      this.weekOffset = 0;
+      onModeChange("week");
+    });
+    const chartWrapper = card.createEl("div", { cls: "weekly-chart-wrapper" });
+    this.canvasElement = chartWrapper.createEl("canvas");
+    this.buildChart(activities, mode);
+  }
+  static updateViewInPlace(activities, mode) {
+    if (this.labelElement) {
+      this.labelElement.textContent = this.getActivePeriodLabel(mode);
+    }
+    if (this.nextBtnElement) {
+      const isAtCurrent = mode === "day" ? this.dayOffset === 0 : this.weekOffset === 0;
+      if (isAtCurrent) {
+        this.nextBtnElement.classList.add("is-disabled");
+      } else {
+        this.nextBtnElement.classList.remove("is-disabled");
+      }
+    }
+    this.buildChart(activities, mode);
+  }
+  static buildChart(activities, mode) {
+    if (!this.canvasElement)
+      return;
+    if (this.chartInstance) {
+      this.chartInstance.destroy();
+      this.chartInstance = null;
+    }
     const labels = [];
+    const tooltipTitles = [];
     const hoursData = [];
-    const today = /* @__PURE__ */ new Date();
+    const baseNow = /* @__PURE__ */ new Date();
     if (mode === "day") {
+      const anchorDate = new Date(baseNow);
+      anchorDate.setDate(baseNow.getDate() - this.dayOffset);
       for (let i = 6; i >= 0; i--) {
-        const d = /* @__PURE__ */ new Date();
-        d.setDate(today.getDate() - i);
-        const iso = d.toISOString().split("T")[0];
-        const label = d.toLocaleDateString("en-US", { weekday: "short" });
-        labels.push(label);
+        const d = new Date(anchorDate);
+        d.setDate(anchorDate.getDate() - i);
+        const iso = this.formatDateISO(d);
+        const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
+        const dayFormatted = this.formatDisplayDate(d);
+        labels.push(`${dayName} (${d.getDate()})`);
+        tooltipTitles.push(`${dayFormatted} - ${d.toLocaleDateString("en-US", { weekday: "long" })}`);
         const mins = activities.filter((a) => a.date === iso).reduce((sum, a) => sum + a.duration, 0);
         hoursData.push(Number((mins / 60).toFixed(1)));
       }
     } else {
+      const anchorEndDate = new Date(baseNow);
+      anchorEndDate.setDate(baseNow.getDate() - this.weekOffset * 7);
       for (let w = 5; w >= 0; w--) {
-        const end = /* @__PURE__ */ new Date();
-        end.setDate(today.getDate() - w * 7);
+        const end = new Date(anchorEndDate);
+        end.setDate(anchorEndDate.getDate() - w * 7);
         const start = new Date(end);
         start.setDate(end.getDate() - 6);
-        labels.push(`W-${w === 0 ? "Now" : w}`);
+        const startLabel = `${this.padZero(start.getDate())}/${this.padZero(start.getMonth() + 1)}`;
+        const endLabel = `${this.padZero(end.getDate())}/${this.padZero(end.getMonth() + 1)}`;
+        labels.push(`${startLabel} - ${endLabel}`);
+        tooltipTitles.push(`${startLabel} - ${endLabel}`);
         const mins = activities.filter((a) => {
           if (!a.date)
             return false;
@@ -13228,9 +13248,7 @@ var WeeklyProgressView = class {
         hoursData.push(Number((mins / 60).toFixed(1)));
       }
     }
-    const chartWrapper = card.createEl("div", { cls: "weekly-chart-wrapper" });
-    const canvas = chartWrapper.createEl("canvas");
-    this.chartInstance = new Chart(canvas, {
+    this.chartInstance = new Chart(this.canvasElement, {
       type: "bar",
       data: {
         labels,
@@ -13272,7 +13290,13 @@ var WeeklyProgressView = class {
             bodyColor: "#94a3b8",
             borderColor: "#334155",
             borderWidth: 1,
+            padding: 10,
             callbacks: {
+              title: (items) => {
+                var _a, _b;
+                const idx = (_b = (_a = items[0]) == null ? void 0 : _a.dataIndex) != null ? _b : 0;
+                return tooltipTitles[idx] || "";
+              },
               label: (ctx) => ` ${ctx.parsed.y} hrs`
             }
           }
@@ -13304,6 +13328,182 @@ var WeeklyProgressView = class {
       }
     });
   }
+  static getActivePeriodLabel(mode) {
+    const d = /* @__PURE__ */ new Date();
+    if (mode === "day") {
+      d.setDate(d.getDate() - this.dayOffset);
+      if (this.dayOffset === 0) {
+        return `Today (${this.formatDisplayDate(d)})`;
+      }
+      const dayName = d.toLocaleDateString("en-US", { weekday: "long" });
+      return `${this.formatDisplayDate(d)} - ${dayName}`;
+    } else {
+      if (this.weekOffset === 0) {
+        return "Current Week";
+      }
+      return `${this.weekOffset}w ago`;
+    }
+  }
+  static formatDisplayDate(date) {
+    const dd = this.padZero(date.getDate());
+    const mm = this.padZero(date.getMonth() + 1);
+    const yyyy = date.getFullYear();
+    return `${dd}/${mm}/${yyyy}`;
+  }
+  static formatDateISO(date) {
+    const yyyy = date.getFullYear();
+    const mm = this.padZero(date.getMonth() + 1);
+    const dd = this.padZero(date.getDate());
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  static padZero(n) {
+    return n < 10 ? `0${n}` : `${n}`;
+  }
+  static destroy() {
+    if (this.chartInstance) {
+      this.chartInstance.destroy();
+      this.chartInstance = null;
+    }
+    this.cardElement = null;
+    this.labelElement = null;
+    this.nextBtnElement = null;
+    this.canvasElement = null;
+  }
+};
+WeeklyProgressView.chartInstance = null;
+WeeklyProgressView.dayOffset = 0;
+WeeklyProgressView.weekOffset = 0;
+WeeklyProgressView.cardElement = null;
+WeeklyProgressView.labelElement = null;
+WeeklyProgressView.nextBtnElement = null;
+WeeklyProgressView.canvasElement = null;
+
+// src/dashboard/components/CategoryChartView.ts
+Chart.register(DoughnutController, ArcElement, plugin_tooltip);
+var CategoryChartView = class {
+  static render(container, activities) {
+    if (this.chartInstance) {
+      this.chartInstance.destroy();
+      this.chartInstance = null;
+    }
+    const card = container.createEl("div", { cls: "analytics-card donut-card" });
+    const header = card.createEl("div", { cls: "analytics-card-header" });
+    header.createEl("div", { text: "Category Distribution", cls: "analytics-card-title" });
+    const categoryTotals = {};
+    for (const a of activities) {
+      const cat = a.type || "General";
+      categoryTotals[cat] = (categoryTotals[cat] || 0) + a.duration;
+    }
+    const labels = Object.keys(categoryTotals);
+    const dataValues = labels.map((cat) => Number((categoryTotals[cat] / 60).toFixed(1)));
+    if (labels.length === 0 || dataValues.every((v) => v === 0)) {
+      card.createEl("p", { text: "No activity recorded for this period.", cls: "analytics-empty-message" });
+      return;
+    }
+    const chartWrapper = card.createEl("div", { cls: "donut-chart-wrapper" });
+    const canvas = chartWrapper.createEl("canvas");
+    const palette = [
+      "#14b8a6",
+      // teal
+      "#38bdf8",
+      // bright sky blue
+      "#818cf8",
+      // indigo
+      "#f43f5e",
+      // rose
+      "#fbbf24",
+      // amber
+      "#a855f7",
+      // purple
+      "#34d399"
+      // emerald
+    ];
+    const sliceColors = palette.slice(0, labels.length);
+    this.chartInstance = new Chart(canvas, {
+      type: "doughnut",
+      data: {
+        labels,
+        datasets: [
+          {
+            data: dataValues,
+            backgroundColor: sliceColors,
+            borderColor: "#11141a",
+            borderWidth: 2,
+            borderAlign: "inner",
+            spacing: 0,
+            hoverOffset: 0
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        devicePixelRatio: Math.max(window.devicePixelRatio || 1, 2),
+        cutout: "72%",
+        layout: {
+          padding: 6
+        },
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            backgroundColor: "rgba(15, 23, 42, 0.95)",
+            titleColor: "#f8fafc",
+            bodyColor: "#e2e8f0",
+            borderColor: "rgba(255, 255, 255, 0.12)",
+            borderWidth: 1,
+            padding: 10,
+            cornerRadius: 8,
+            titleFont: {
+              family: "'Geist Mono', monospace",
+              size: 12,
+              weight: "bold"
+            },
+            bodyFont: {
+              family: "'Geist Mono', monospace",
+              size: 11
+            },
+            callbacks: {
+              label: (ctx) => ` ${ctx.label}: ${ctx.parsed} hrs`
+            }
+          }
+        },
+        elements: {
+          arc: {
+            borderJoinStyle: "round"
+          }
+        }
+      },
+      plugins: [
+        {
+          id: "enforceMinArc",
+          beforeUpdate(chart) {
+            const meta = chart.getDatasetMeta(0);
+            if (!meta || !meta.data || meta.data.length <= 1)
+              return;
+            const minRadians = 0.09;
+            const total = meta.controller._getDataset().data.reduce((a, b) => a + b, 0);
+            if (total === 0)
+              return;
+            meta.data.forEach((element, i) => {
+              const val = Number(chart.data.datasets[0].data[i]);
+              if (val > 0 && element.circumference !== void 0 && element.circumference < minRadians) {
+                element.circumference = minRadians;
+              }
+            });
+          }
+        }
+      ]
+    });
+    const legendContainer = card.createEl("div", { cls: "donut-html-legend" });
+    labels.forEach((label, idx) => {
+      const item = legendContainer.createEl("div", { cls: "donut-legend-item" });
+      const dot = item.createEl("span", { cls: "donut-legend-dot" });
+      dot.style.backgroundColor = sliceColors[idx];
+      item.createEl("span", { text: label });
+    });
+  }
   static destroy() {
     if (this.chartInstance) {
       this.chartInstance.destroy();
@@ -13311,23 +13511,24 @@ var WeeklyProgressView = class {
     }
   }
 };
-WeeklyProgressView.chartInstance = null;
+CategoryChartView.chartInstance = null;
 
 // src/dashboard/DashboardView.ts
-var VIEW_TYPE_VITALS = "vitals-dashboard-view";
+var DASHBOARD_VIEW_TYPE = "vitals-dashboard-view";
+var VIEW_TYPE_VITALS = DASHBOARD_VIEW_TYPE;
 var DashboardView = class extends import_obsidian.ItemView {
   constructor(leaf, dataEngine) {
     super(leaf);
-    this.selectedRange = "all";
-    this.selectedYear = (/* @__PURE__ */ new Date()).getFullYear();
+    this.currentRange = "30d";
+    this.rangeOffset = 0;
     this.progressMode = "day";
     this.dataEngine = dataEngine;
   }
   getViewType() {
-    return VIEW_TYPE_VITALS;
+    return DASHBOARD_VIEW_TYPE;
   }
   getDisplayText() {
-    return "Vitals";
+    return "Vitals Dashboard";
   }
   getIcon() {
     return "activity";
@@ -13340,76 +13541,146 @@ var DashboardView = class extends import_obsidian.ItemView {
     container.empty();
     container.addClass("activity-analytics-container");
     const allActivities = this.dataEngine.getActivities();
-    const filteredActivities = StatisticsEngine.filterActivities(allActivities, this.selectedRange);
-    const stats = StatisticsEngine.calculateOverall(filteredActivities);
     const topBar = container.createEl("div", { cls: "analytics-top-bar" });
     const titleArea = topBar.createEl("div", { cls: "analytics-title-area" });
     titleArea.createEl("h2", { text: "Vitals" });
-    const filters = topBar.createEl("div", { cls: "analytics-pill-group global-filters" });
+    const filterContainer = topBar.createEl("div", { cls: "analytics-top-controls" });
+    if (this.currentRange === "month" || this.currentRange === "year") {
+      const navGroup = filterContainer.createEl("div", { cls: "analytics-pill-group range-nav-group" });
+      const prevBtn = navGroup.createEl("button", {
+        text: "\u2039",
+        cls: "analytics-pill-btn range-nav-arrow",
+        attr: { "aria-label": "Previous Period" }
+      });
+      prevBtn.addEventListener("click", () => {
+        this.rangeOffset += 1;
+        this.render();
+      });
+      navGroup.createEl("span", {
+        text: this.getRangePeriodLabel(),
+        cls: "range-nav-current-label"
+      });
+      const isAtCurrent = this.rangeOffset === 0;
+      const nextBtn = navGroup.createEl("button", {
+        text: "\u203A",
+        cls: `analytics-pill-btn range-nav-arrow ${isAtCurrent ? "is-disabled" : ""}`,
+        attr: { "aria-label": "Next Period" }
+      });
+      if (!isAtCurrent) {
+        nextBtn.addEventListener("click", () => {
+          this.rangeOffset = Math.max(0, this.rangeOffset - 1);
+          this.render();
+        });
+      }
+    }
+    const pillGroup = filterContainer.createEl("div", { cls: "analytics-pill-group" });
     const ranges = [
-      { key: "7d", label: "7 Days" },
-      { key: "30d", label: "30 Days" },
-      { key: "month", label: "This Month" },
-      { key: "prev_month", label: "Prev Month" },
-      { key: "year", label: "This Year" },
-      { key: "prev_year", label: "Prev Year" },
-      { key: "all", label: "All Time" }
+      { key: "30d", label: "30D" },
+      { key: "month", label: "Month" },
+      { key: "year", label: "Year" },
+      { key: "all", label: "All" }
     ];
     for (const r of ranges) {
-      const btn = filters.createEl("button", {
+      const btn = pillGroup.createEl("button", {
         text: r.label,
-        cls: `analytics-pill-btn ${this.selectedRange === r.key ? "is-active" : ""}`
+        cls: `analytics-pill-btn ${this.currentRange === r.key ? "is-active" : ""}`
       });
       btn.addEventListener("click", () => {
-        this.selectedRange = r.key;
+        this.currentRange = r.key;
+        this.rangeOffset = 0;
         this.render();
       });
     }
-    const metricsGrid = container.createEl("div", { cls: "analytics-metrics-grid" });
-    this.renderMetricCard(metricsGrid, "Total Tracked", stats.totalHours, "hrs", this.getRangeLabel());
-    this.renderMetricCard(metricsGrid, "Sessions", `${stats.totalSessions}`, "sessions", "filtered");
-    this.renderMetricCard(metricsGrid, "Active Days", `${stats.activeDaysCount}`, "days", "consistency");
-    this.renderMetricCard(metricsGrid, "Categories", `${stats.categories.length}`, "types", "active");
-    HeatmapView.render(container, allActivities, this.selectedYear, (newYear) => {
-      this.selectedYear = newYear;
-      this.render();
-    });
+    const filteredActivities = this.filterActivities(allActivities, this.currentRange, this.rangeOffset);
+    this.renderMetricCards(container, filteredActivities);
+    HeatmapView.render(container, allActivities);
     const chartsRow = container.createEl("div", { cls: "analytics-charts-row" });
-    WeeklyProgressView.render(chartsRow, filteredActivities, this.progressMode, (newMode) => {
+    WeeklyProgressView.render(chartsRow, allActivities, this.progressMode, (newMode) => {
       this.progressMode = newMode;
       this.render();
     });
-    CategoryChartView.render(chartsRow, stats.categories);
+    CategoryChartView.render(chartsRow, filteredActivities);
   }
-  getRangeLabel() {
-    switch (this.selectedRange) {
-      case "7d":
-        return "last 7 days";
-      case "30d":
-        return "last 30 days";
-      case "month":
-        return "this month";
-      case "prev_month":
-        return "last month";
-      case "year":
-        return "this year";
-      case "prev_year":
-        return "last year";
-      default:
-        return "all time";
+  renderMetricCards(container, activities) {
+    const grid = container.createEl("div", { cls: "analytics-metrics-grid" });
+    const totalMinutes = activities.reduce((sum, a) => sum + a.duration, 0);
+    const totalHours = (totalMinutes / 60).toFixed(1);
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    const loggedBadge = h > 0 ? `${h}h ${m}m logged` : `${m}m logged`;
+    const activeDaysSet = new Set(activities.map((a) => a.date).filter(Boolean));
+    const activeDays = activeDaysSet.size;
+    const uniqueCategories = new Set(activities.map((a) => a.type).filter(Boolean)).size;
+    const avgMinutesPerDay = activeDays > 0 ? Math.round(totalMinutes / activeDays) : 0;
+    const avgHours = (avgMinutesPerDay / 60).toFixed(1);
+    const metrics = [
+      { label: "Total Time", value: totalHours, unit: "hrs", badge: loggedBadge },
+      { label: "Active Days", value: `${activeDays}`, unit: "days", badge: "consistency" },
+      { label: "Categories", value: `${uniqueCategories}`, unit: "types", badge: "active" },
+      { label: "Daily Avg", value: avgHours, unit: "hrs/day", badge: "pace" }
+    ];
+    for (const m2 of metrics) {
+      const card = grid.createEl("div", { cls: "analytics-metric-card" });
+      card.createEl("div", { text: m2.label, cls: "analytics-metric-title" });
+      const row = card.createEl("div", { cls: "analytics-metric-value-row" });
+      const val = row.createEl("div", { text: m2.value, cls: "analytics-metric-value" });
+      val.createEl("span", { text: m2.unit });
+      card.createEl("div", { text: m2.badge, cls: "analytics-metric-badge" });
     }
   }
-  renderMetricCard(parent, title, value, unit, badgeText) {
-    const card = parent.createEl("div", { cls: "analytics-metric-card" });
-    card.createEl("div", { text: title, cls: "analytics-metric-title" });
-    const valRow = card.createEl("div", { cls: "analytics-metric-value-row" });
-    const valueEl = valRow.createEl("div", { cls: "analytics-metric-value", text: value });
-    valueEl.createEl("span", { text: unit });
-    card.createEl("div", { text: badgeText, cls: "analytics-metric-badge" });
+  getRangePeriodLabel() {
+    const now = /* @__PURE__ */ new Date();
+    if (this.currentRange === "month") {
+      const targetDate = new Date(now.getFullYear(), now.getMonth() - this.rangeOffset, 1);
+      return targetDate.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+    } else if (this.currentRange === "year") {
+      const targetYear = now.getFullYear() - this.rangeOffset;
+      return `${targetYear}`;
+    }
+    return "";
+  }
+  filterActivities(activities, range, offset) {
+    const now = /* @__PURE__ */ new Date();
+    if (range === "all") {
+      return activities;
+    }
+    if (range === "30d") {
+      const past30 = new Date(now);
+      past30.setDate(now.getDate() - 30);
+      return activities.filter((a) => {
+        if (!a.date)
+          return false;
+        const d = /* @__PURE__ */ new Date(a.date + "T00:00:00");
+        return d >= past30 && d <= now;
+      });
+    }
+    if (range === "month") {
+      const targetMonthDate = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const start = new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth(), 1);
+      const end = new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth() + 1, 0, 23, 59, 59);
+      return activities.filter((a) => {
+        if (!a.date)
+          return false;
+        const d = /* @__PURE__ */ new Date(a.date + "T00:00:00");
+        return d >= start && d <= end;
+      });
+    }
+    if (range === "year") {
+      const targetYear = now.getFullYear() - offset;
+      const start = new Date(targetYear, 0, 1);
+      const end = new Date(targetYear, 11, 31, 23, 59, 59);
+      return activities.filter((a) => {
+        if (!a.date)
+          return false;
+        const d = /* @__PURE__ */ new Date(a.date + "T00:00:00");
+        return d >= start && d <= end;
+      });
+    }
+    return activities;
   }
   async onClose() {
-    CategoryChartView.destroy();
     WeeklyProgressView.destroy();
+    CategoryChartView.destroy();
   }
 };
 

@@ -1,9 +1,8 @@
 export interface Activity {
-  filePath: string;
+  id: string;
+  title: string;
   type: string;
-  date: string;
-  duration: number;
-  tags?: string[];
+  date: string; // ISO format: YYYY-MM-DD
+  duration: number; // Normalized integer minutes
   project?: string;
-  notes?: string;
 }

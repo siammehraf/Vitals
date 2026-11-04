@@ -1,6 +1,6 @@
 {
   "name": "vitals",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Obsidian plugin to visualize activity, study, and project vitals from note frontmatter.",
   "main": "main.js",
   "scripts": {

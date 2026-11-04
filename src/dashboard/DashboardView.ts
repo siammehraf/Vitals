@@ -1,16 +1,19 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
+import { Activity } from '../models/Activity';
 import { DataEngine } from '../core/DataEngine';
-import { StatisticsEngine, TimeRange } from '../core/StatisticsEngine';
 import { HeatmapView } from './components/HeatmapView';
-import { CategoryChartView } from './components/CategoryChartView';
 import { WeeklyProgressView, ProgressViewMode } from './components/WeeklyProgressView';
+import { CategoryChartView } from './components/CategoryChartView';
 
-export const VIEW_TYPE_VITALS = 'vitals-dashboard-view';
+export const DASHBOARD_VIEW_TYPE = 'vitals-dashboard-view';
+export const VIEW_TYPE_VITALS = DASHBOARD_VIEW_TYPE;
+
+export type TimeRangeFilter = '30d' | 'month' | 'year' | 'all';
 
 export class DashboardView extends ItemView {
   private dataEngine: DataEngine;
-  private selectedRange: TimeRange = 'all';
-  private selectedYear: number = new Date().getFullYear();
+  private currentRange: TimeRangeFilter = '30d';
+  private rangeOffset: number = 0;
   private progressMode: ProgressViewMode = 'day';
 
   constructor(leaf: WorkspaceLeaf, dataEngine: DataEngine) {
@@ -18,19 +21,19 @@ export class DashboardView extends ItemView {
     this.dataEngine = dataEngine;
   }
 
-  getViewType(): string {
-    return VIEW_TYPE_VITALS;
+  public getViewType(): string {
+    return DASHBOARD_VIEW_TYPE;
   }
 
-  getDisplayText(): string {
-    return 'Vitals';
+  public getDisplayText(): string {
+    return 'Vitals Dashboard';
   }
 
-  getIcon(): string {
+  public getIcon(): string {
     return 'activity';
   }
 
-  async onOpen(): Promise<void> {
+  public async onOpen(): Promise<void> {
     this.render();
   }
 
@@ -40,91 +43,180 @@ export class DashboardView extends ItemView {
     container.addClass('activity-analytics-container');
 
     const allActivities = this.dataEngine.getActivities();
-    const filteredActivities = StatisticsEngine.filterActivities(allActivities, this.selectedRange);
-    const stats = StatisticsEngine.calculateOverall(filteredActivities);
 
-    // 1. Top Header with Time Filters
+    // Top Header & Compact Controls
     const topBar = container.createEl('div', { cls: 'analytics-top-bar' });
     const titleArea = topBar.createEl('div', { cls: 'analytics-title-area' });
     titleArea.createEl('h2', { text: 'Vitals' });
 
-    // Time Range Filters
-    const filters = topBar.createEl('div', { cls: 'analytics-pill-group global-filters' });
-    const ranges: { key: TimeRange; label: string }[] = [
-      { key: '7d', label: '7 Days' },
-      { key: '30d', label: '30 Days' },
-      { key: 'month', label: 'This Month' },
-      { key: 'prev_month', label: 'Prev Month' },
-      { key: 'year', label: 'This Year' },
-      { key: 'prev_year', label: 'Prev Year' },
-      { key: 'all', label: 'All Time' },
+    const filterContainer = topBar.createEl('div', { cls: 'analytics-top-controls' });
+
+    // Period Navigation (‹ Label ›) for Month and Year
+    if (this.currentRange === 'month' || this.currentRange === 'year') {
+      const navGroup = filterContainer.createEl('div', { cls: 'analytics-pill-group range-nav-group' });
+
+      const prevBtn = navGroup.createEl('button', {
+        text: '‹',
+        cls: 'analytics-pill-btn range-nav-arrow',
+        attr: { 'aria-label': 'Previous Period' },
+      });
+      prevBtn.addEventListener('click', () => {
+        this.rangeOffset += 1;
+        this.render();
+      });
+
+      navGroup.createEl('span', {
+        text: this.getRangePeriodLabel(),
+        cls: 'range-nav-current-label',
+      });
+
+      const isAtCurrent = this.rangeOffset === 0;
+      const nextBtn = navGroup.createEl('button', {
+        text: '›',
+        cls: `analytics-pill-btn range-nav-arrow ${isAtCurrent ? 'is-disabled' : ''}`,
+        attr: { 'aria-label': 'Next Period' },
+      });
+      if (!isAtCurrent) {
+        nextBtn.addEventListener('click', () => {
+          this.rangeOffset = Math.max(0, this.rangeOffset - 1);
+          this.render();
+        });
+      }
+    }
+
+    // Range Mode Selector: [ 30D | Month | Year | All ]
+    const pillGroup = filterContainer.createEl('div', { cls: 'analytics-pill-group' });
+    const ranges: { key: TimeRangeFilter; label: string }[] = [
+      { key: '30d', label: '30D' },
+      { key: 'month', label: 'Month' },
+      { key: 'year', label: 'Year' },
+      { key: 'all', label: 'All' },
     ];
 
     for (const r of ranges) {
-      const btn = filters.createEl('button', {
+      const btn = pillGroup.createEl('button', {
         text: r.label,
-        cls: `analytics-pill-btn ${this.selectedRange === r.key ? 'is-active' : ''}`,
+        cls: `analytics-pill-btn ${this.currentRange === r.key ? 'is-active' : ''}`,
       });
       btn.addEventListener('click', () => {
-        this.selectedRange = r.key;
+        this.currentRange = r.key;
+        this.rangeOffset = 0;
         this.render();
       });
     }
 
-    // 2. Metrics Cards Row
-    const metricsGrid = container.createEl('div', { cls: 'analytics-metrics-grid' });
-    this.renderMetricCard(metricsGrid, 'Total Tracked', stats.totalHours, 'hrs', this.getRangeLabel());
-    this.renderMetricCard(metricsGrid, 'Sessions', `${stats.totalSessions}`, 'sessions', 'filtered');
-    this.renderMetricCard(metricsGrid, 'Active Days', `${stats.activeDaysCount}`, 'days', 'consistency');
-    this.renderMetricCard(metricsGrid, 'Categories', `${stats.categories.length}`, 'types', 'active');
+    const filteredActivities = this.filterActivities(allActivities, this.currentRange, this.rangeOffset);
 
-    // 3. GitHub Contribution Heatmap with Year Switcher
-    HeatmapView.render(container, allActivities, this.selectedYear, (newYear) => {
-      this.selectedYear = newYear;
-      this.render();
-    });
+    // 1. Metric Summary Cards
+    this.renderMetricCards(container, filteredActivities);
 
-    // 4. Two-Column Chart Layout (Trend + Category Donut)
+    // 2. Heatmap
+    HeatmapView.render(container, allActivities);
+
+    // 3. Lower Row: Trend & Category Distribution
     const chartsRow = container.createEl('div', { cls: 'analytics-charts-row' });
-    WeeklyProgressView.render(chartsRow, filteredActivities, this.progressMode, (newMode) => {
+
+    WeeklyProgressView.render(chartsRow, allActivities, this.progressMode, (newMode) => {
       this.progressMode = newMode;
       this.render();
     });
-    CategoryChartView.render(chartsRow, stats.categories);
+
+    CategoryChartView.render(chartsRow, filteredActivities);
   }
 
-  private getRangeLabel(): string {
-    switch (this.selectedRange) {
-      case '7d':
-        return 'last 7 days';
-      case '30d':
-        return 'last 30 days';
-      case 'month':
-        return 'this month';
-      case 'prev_month':
-        return 'last month';
-      case 'year':
-        return 'this year';
-      case 'prev_year':
-        return 'last year';
-      default:
-        return 'all time';
+  private renderMetricCards(container: HTMLElement, activities: Activity[]): void {
+    const grid = container.createEl('div', { cls: 'analytics-metrics-grid' });
+
+    const totalMinutes = activities.reduce((sum, a) => sum + a.duration, 0);
+    const totalHours = (totalMinutes / 60).toFixed(1);
+
+    const h = Math.floor(totalMinutes / 60);
+    const m = totalMinutes % 60;
+    const loggedBadge = h > 0 ? `${h}h ${m}m logged` : `${m}m logged`;
+
+    const activeDaysSet = new Set(activities.map((a) => a.date).filter(Boolean));
+    const activeDays = activeDaysSet.size;
+
+    const uniqueCategories = new Set(activities.map((a) => a.type).filter(Boolean)).size;
+
+    const avgMinutesPerDay = activeDays > 0 ? Math.round(totalMinutes / activeDays) : 0;
+    const avgHours = (avgMinutesPerDay / 60).toFixed(1);
+
+    const metrics = [
+      { label: 'Total Time', value: totalHours, unit: 'hrs', badge: loggedBadge },
+      { label: 'Active Days', value: `${activeDays}`, unit: 'days', badge: 'consistency' },
+      { label: 'Categories', value: `${uniqueCategories}`, unit: 'types', badge: 'active' },
+      { label: 'Daily Avg', value: avgHours, unit: 'hrs/day', badge: 'pace' },
+    ];
+
+    for (const m of metrics) {
+      const card = grid.createEl('div', { cls: 'analytics-metric-card' });
+      card.createEl('div', { text: m.label, cls: 'analytics-metric-title' });
+      const row = card.createEl('div', { cls: 'analytics-metric-value-row' });
+      const val = row.createEl('div', { text: m.value, cls: 'analytics-metric-value' });
+      val.createEl('span', { text: m.unit });
+      card.createEl('div', { text: m.badge, cls: 'analytics-metric-badge' });
     }
   }
 
-  private renderMetricCard(parent: HTMLElement, title: string, value: string, unit: string, badgeText: string): void {
-    const card = parent.createEl('div', { cls: 'analytics-metric-card' });
-    card.createEl('div', { text: title, cls: 'analytics-metric-title' });
-
-    const valRow = card.createEl('div', { cls: 'analytics-metric-value-row' });
-    const valueEl = valRow.createEl('div', { cls: 'analytics-metric-value', text: value });
-    valueEl.createEl('span', { text: unit });
-
-    card.createEl('div', { text: badgeText, cls: 'analytics-metric-badge' });
+  private getRangePeriodLabel(): string {
+    const now = new Date();
+    if (this.currentRange === 'month') {
+      const targetDate = new Date(now.getFullYear(), now.getMonth() - this.rangeOffset, 1);
+      return targetDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+    } else if (this.currentRange === 'year') {
+      const targetYear = now.getFullYear() - this.rangeOffset;
+      return `${targetYear}`;
+    }
+    return '';
   }
 
-  async onClose(): Promise<void> {
-    CategoryChartView.destroy();
+  private filterActivities(activities: Activity[], range: TimeRangeFilter, offset: number): Activity[] {
+    const now = new Date();
+
+    if (range === 'all') {
+      return activities;
+    }
+
+    if (range === '30d') {
+      const past30 = new Date(now);
+      past30.setDate(now.getDate() - 30);
+      return activities.filter((a) => {
+        if (!a.date) return false;
+        const d = new Date(a.date + 'T00:00:00');
+        return d >= past30 && d <= now;
+      });
+    }
+
+    if (range === 'month') {
+      const targetMonthDate = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const start = new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth(), 1);
+      const end = new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth() + 1, 0, 23, 59, 59);
+
+      return activities.filter((a) => {
+        if (!a.date) return false;
+        const d = new Date(a.date + 'T00:00:00');
+        return d >= start && d <= end;
+      });
+    }
+
+    if (range === 'year') {
+      const targetYear = now.getFullYear() - offset;
+      const start = new Date(targetYear, 0, 1);
+      const end = new Date(targetYear, 11, 31, 23, 59, 59);
+
+      return activities.filter((a) => {
+        if (!a.date) return false;
+        const d = new Date(a.date + 'T00:00:00');
+        return d >= start && d <= end;
+      });
+    }
+
+    return activities;
+  }
+
+  public async onClose(): Promise<void> {
     WeeklyProgressView.destroy();
+    CategoryChartView.destroy();
   }
 }

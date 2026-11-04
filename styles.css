@@ -1,9 +1,7 @@
 /* activity-analytics/styles.css */
 
-/* Import Geist Mono Regular font */
 @import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&display=swap');
 
-/* Main Container */
 .activity-analytics-container {
   padding: 28px 32px;
   max-width: 1200px;
@@ -17,7 +15,14 @@
   font-family: inherit;
 }
 
-/* Top Header & Range Filters */
+.donut-chart-wrapper canvas,
+.weekly-chart-wrapper canvas {
+  image-rendering: auto;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Top Header & Compact Controls */
 .analytics-top-bar {
   display: flex;
   justify-content: space-between;
@@ -35,8 +40,16 @@
   letter-spacing: -0.02em;
 }
 
+.analytics-top-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .analytics-pill-group {
   display: inline-flex;
+  align-items: center;
   background-color: #1a202c;
   padding: 4px;
   border-radius: 8px;
@@ -70,7 +83,36 @@
   border: 1px solid rgba(45, 212, 191, 0.4);
 }
 
-/* 1. Metrics Grid & Cards */
+.analytics-pill-btn.is-disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.range-nav-group,
+.trend-nav-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.range-nav-arrow,
+.trend-nav-arrow {
+  padding: 4px 10px;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.range-nav-current-label,
+.trend-nav-current-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #2dd4bf;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+/* Metrics Grid */
 .analytics-metrics-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -131,8 +173,9 @@
   text-transform: lowercase;
 }
 
-/* 2. Base Analytics Card */
+/* Card Container */
 .analytics-card {
+  position: relative;
   background-color: #11141a;
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
@@ -143,6 +186,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
   margin-bottom: 18px;
 }
 
@@ -152,7 +197,14 @@
   color: #f1f5f9;
 }
 
-/* 3. GitHub Contribution Heatmap */
+.trend-header-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* Heatmap Component */
 .heatmap-card {
   margin-bottom: 24px;
 }
@@ -172,7 +224,8 @@
 
 .heatmap-grid-container {
   overflow-x: auto;
-  padding-bottom: 8px;
+  overflow-y: visible;
+  padding: 6px 0 10px 0;
 }
 
 .heatmap-grid {
@@ -182,20 +235,23 @@
   grid-auto-columns: 13px;
   gap: 4px;
   width: max-content;
+  position: relative;
 }
 
 .heatmap-cell {
   width: 13px;
   height: 13px;
   border-radius: 3px;
+  position: relative;
   transition:
-    transform 0.1s ease,
-    filter 0.1s ease;
+    transform 0.12s ease,
+    filter 0.12s ease;
 }
 
 .heatmap-cell:hover {
-  transform: scale(1.25);
+  transform: scale(1.2);
   filter: brightness(1.2);
+  z-index: 10; /* Ensures the active cell always sits above surrounding elements */
 }
 
 .heatmap-cell.level-0 {
@@ -215,8 +271,27 @@
   box-shadow: 0 0 6px rgba(57, 211, 83, 0.45);
 }
 
-.heatmap-cell.out-of-bounds {
-  opacity: 0.12;
+/* Floating Clean Tooltip for Heatmap */
+.heatmap-floating-tooltip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background-color: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #f8fafc;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.74rem;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.heatmap-floating-tooltip.is-visible {
+  opacity: 1;
 }
 
 .heatmap-footer {
@@ -234,7 +309,7 @@
   gap: 4px;
 }
 
-/* 4. Side-by-Side Lower Charts */
+/* Lower Charts Grid */
 .analytics-charts-row {
   display: grid;
   grid-template-columns: 1.35fr 1fr;
@@ -255,8 +330,33 @@
 
 .donut-chart-wrapper {
   position: relative;
-  height: 250px;
+  height: 210px;
   width: 100%;
+}
+
+.donut-html-legend {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.donut-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #cbd5e1;
+  letter-spacing: 0.02em;
+}
+
+.donut-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 
 .analytics-empty-message {
