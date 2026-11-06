@@ -1,143 +1,168 @@
 import { App, PluginSettingTab, Setting } from 'obsidian';
-import type VitalsPlugin from '../main';
+import VitalsPlugin from '../main';
+import { SpotifyAuthService } from '../modules/spotify/SpotifyAuthService';
 
-export type VitalsThemePreset = 'vitals-stealth' | 'github-dark' | 'github-light' | 'nord-frost' | 'obsidian-native';
+// Built-in public Client ID for 1-click connect
+export const DEFAULT_SPOTIFY_CLIENT_ID = 'f83cda7c12094a609ece5d9d0c7c3bdd';
 
 export interface VitalsSettings {
-  themePreset: VitalsThemePreset;
+  themePreset: string;
+  customFontFamily: string;
   includedFolders: string;
   excludedFolders: string;
   categoryColors: Record<string, string>;
+  spotifyClientId: string;
+  spotifyRefreshToken: string;
+  spotifyAutoSync: boolean;
 }
 
 export const DEFAULT_SETTINGS: VitalsSettings = {
   themePreset: 'vitals-stealth',
+  customFontFamily: 'Geist Mono',
   includedFolders: '',
   excludedFolders: 'Templates, Archive',
-  categoryColors: {
-    Writing: '#10b981',
-    Reading: '#38bdf8',
-    Coding: '#818cf8',
-    Research: '#f59e0b',
-    Unknown: '#64748b',
-  },
+  categoryColors: {},
+  spotifyClientId: DEFAULT_SPOTIFY_CLIENT_ID,
+  spotifyRefreshToken: '',
+  spotifyAutoSync: true,
 };
 
 export class VitalsSettingTab extends PluginSettingTab {
-  private plugin: VitalsPlugin;
+  plugin: VitalsPlugin;
 
   constructor(app: App, plugin: VitalsPlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }
 
-  public display(): void {
+  display(): void {
     const { containerEl } = this;
     containerEl.empty();
 
     containerEl.createEl('h2', { text: 'Vitals Settings' });
 
-    // 1. Theme Preset Selector
+    // 1. Theme Preset
     new Setting(containerEl)
-      .setName('Dashboard Theme')
-      .setDesc('Choose the visual appearance and color profile of the dashboard.')
+      .setName('Theme Preset')
+      .setDesc('Choose the visual theme for your Vitals dashboard.')
       .addDropdown((dropdown) => {
         dropdown
-          .addOption('vitals-stealth', 'Vitals Stealth (Signature Dark)')
+          .addOption('vitals-stealth', 'Vitals Stealth (Default)')
           .addOption('github-dark', 'GitHub Dark')
           .addOption('github-light', 'GitHub Light')
           .addOption('nord-frost', 'Nord Frost')
-          .addOption('obsidian-native', 'Obsidian Native (Sync with Vault Theme)')
+          .addOption('obsidian-native', 'Obsidian Native')
           .setValue(this.plugin.settings.themePreset)
-          .onChange(async (val) => {
-            this.plugin.settings.themePreset = val as VitalsThemePreset;
+          .onChange(async (value) => {
+            this.plugin.settings.themePreset = value;
             await this.plugin.saveSettings();
           });
       });
 
-    // 2. Vault Scope: Included Folders
+    // 2. Custom Font Family
     new Setting(containerEl)
-      .setName('Included Folders')
-      .setDesc("Scan only these folders (comma-separated, e.g., 'Logs, Daily'). Leave empty to scan the entire vault.")
-      .addText((text) =>
+      .setName('Dashboard Font Family')
+      .setDesc('Enter any font installed on your computer or available on Google Fonts.')
+      .addText((text) => {
         text
-          .setPlaceholder('All folders')
-          .setValue(this.plugin.settings.includedFolders)
-          .onChange(async (val) => {
-            this.plugin.settings.includedFolders = val;
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    // 3. Vault Scope: Excluded Folders
-    new Setting(containerEl)
-      .setName('Excluded Folders')
-      .setDesc("Never scan notes in these folders (comma-separated, e.g., 'Templates, Archive, Drafts').")
-      .addText((text) =>
-        text
-          .setPlaceholder('Templates, Archive')
-          .setValue(this.plugin.settings.excludedFolders)
-          .onChange(async (val) => {
-            this.plugin.settings.excludedFolders = val;
-            await this.plugin.saveSettings();
-          }),
-      );
-
-    // 4. Category Color Mapping
-    containerEl.createEl('h3', { text: 'Category Colors' });
-    containerEl.createEl('p', {
-      text: 'Assign dedicated colors to ensure categories remain visually consistent across all timeframe views.',
-      cls: 'setting-item-description',
-    });
-
-    const entries = Object.entries(this.plugin.settings.categoryColors);
-    for (const [catName, colorVal] of entries) {
-      new Setting(containerEl)
-        .setName(catName)
-        .addColorPicker((color) => {
-          color.setValue(colorVal).onChange(async (newColor) => {
-            this.plugin.settings.categoryColors[catName] = newColor;
+          .setPlaceholder('Geist Mono')
+          .setValue(this.plugin.settings.customFontFamily)
+          .onChange(async (value) => {
+            this.plugin.settings.customFontFamily = value.trim() || 'Geist Mono';
             await this.plugin.saveSettings();
           });
-        })
-        .addButton((btn) => {
+      });
+
+    // 3. Spotify Connection (PKCE Flow)
+    containerEl.createEl('h3', { text: 'Spotify Integration' });
+
+    // Ensure the ID is populated if previously blank
+    if (!this.plugin.settings.spotifyClientId) {
+      this.plugin.settings.spotifyClientId = DEFAULT_SPOTIFY_CLIENT_ID;
+    }
+
+    const isConnected = Boolean(this.plugin.settings.spotifyRefreshToken);
+
+    new Setting(containerEl)
+      .setName('Account Status')
+      .setDesc(
+        isConnected
+          ? 'Connected! Auto-sync is actively logging your streams.'
+          : 'Connect your Spotify account with 1-click authorization.',
+      )
+      .addButton((btn) => {
+        if (isConnected) {
           btn
-            .setButtonText('Remove')
+            .setButtonText('Disconnect')
             .setWarning()
             .onClick(async () => {
-              delete this.plugin.settings.categoryColors[catName];
+              this.plugin.settings.spotifyRefreshToken = '';
               await this.plugin.saveSettings();
               this.display();
             });
-        });
-    }
-
-    let newCategoryName = '';
-    let newCategoryColor = '#2dd4bf';
+        } else {
+          btn
+            .setButtonText('Connect Spotify')
+            .setCta()
+            .onClick(async () => {
+              await SpotifyAuthService.loginWithSpotify(this.plugin.settings, async () => {
+                await this.plugin.saveSettings();
+                this.display();
+              });
+            });
+        }
+      });
 
     new Setting(containerEl)
-      .setName('Add Category Color')
-      .setDesc('Map a new category name to a custom hex color.')
-      .addText((text) =>
-        text.setPlaceholder('e.g. DeepWork').onChange((val) => {
-          newCategoryName = val.trim();
-        }),
-      )
-      .addColorPicker((picker) =>
-        picker.setValue(newCategoryColor).onChange((val) => {
-          newCategoryColor = val;
-        }),
-      )
-      .addButton((btn) =>
-        btn
-          .setButtonText('Add')
-          .setCta()
-          .onClick(async () => {
-            if (!newCategoryName) return;
-            this.plugin.settings.categoryColors[newCategoryName] = newCategoryColor;
+      .setName('Custom Client ID (Optional)')
+      .setDesc('Use your own Spotify Developer App Client ID instead of the default.')
+      .addText((text) => {
+        text
+          .setPlaceholder(DEFAULT_SPOTIFY_CLIENT_ID)
+          .setValue(this.plugin.settings.spotifyClientId)
+          .onChange(async (val) => {
+            this.plugin.settings.spotifyClientId = val.trim() || DEFAULT_SPOTIFY_CLIENT_ID;
             await this.plugin.saveSettings();
-            this.display();
-          }),
-      );
+          });
+      });
+
+    new Setting(containerEl)
+      .setName('Background Auto-Sync')
+      .setDesc('Automatically fetch your latest played tracks every 15 minutes.')
+      .addToggle((toggle) => {
+        toggle.setValue(this.plugin.settings.spotifyAutoSync).onChange(async (val) => {
+          this.plugin.settings.spotifyAutoSync = val;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    // 4. Vault Filters
+    containerEl.createEl('h3', { text: 'Vault Filters' });
+
+    new Setting(containerEl)
+      .setName('Included Folders')
+      .setDesc('Comma-separated folder paths to track.')
+      .addText((text) => {
+        text
+          .setPlaceholder('e.g. Work, Journal')
+          .setValue(this.plugin.settings.includedFolders)
+          .onChange(async (value) => {
+            this.plugin.settings.includedFolders = value;
+            await this.plugin.saveSettings();
+          });
+      });
+
+    new Setting(containerEl)
+      .setName('Excluded Folders')
+      .setDesc('Comma-separated folder paths to ignore.')
+      .addText((text) => {
+        text
+          .setPlaceholder('e.g. Templates, Archive')
+          .setValue(this.plugin.settings.excludedFolders)
+          .onChange(async (value) => {
+            this.plugin.settings.excludedFolders = value;
+            await this.plugin.saveSettings();
+          });
+      });
   }
 }

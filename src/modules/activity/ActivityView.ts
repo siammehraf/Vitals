@@ -1,79 +1,44 @@
-import { ItemView, WorkspaceLeaf, Notice, TFile, Menu } from 'obsidian';
-import { Activity } from '../models/Activity';
-import { DataEngine } from '../core/DataEngine';
-import { VitalsSettings } from '../settings/VitalsSettings';
+import { App, Notice, TFile, Menu } from 'obsidian';
+import { Activity } from '../../models/Activity';
+import { DataEngine } from '../../core/DataEngine';
+import { VitalsSettings } from '../../settings/VitalsSettings';
+import { VitalsModuleView } from '../../models/ModuleView';
 import { HeatmapView } from './components/HeatmapView';
 import { WeeklyProgressView, ProgressViewMode } from './components/WeeklyProgressView';
 import { CategoryChartView } from './components/CategoryChartView';
 import { TimeOfDayView } from './components/TimeOfDayView';
 
-export const DASHBOARD_VIEW_TYPE = 'vitals-dashboard-view';
-export const VIEW_TYPE_VITALS = DASHBOARD_VIEW_TYPE;
-
 export type TimeRangeFilter = 'day' | '30d' | 'month' | 'year' | 'all';
 
-export class DashboardView extends ItemView {
+export class ActivityView implements VitalsModuleView {
+  private app: App;
   private dataEngine: DataEngine;
   private settings: VitalsSettings;
+  private containerEl: HTMLElement | null = null;
+
   private currentRange: TimeRangeFilter = '30d';
   private rangeOffset: number = 0;
   private progressMode: ProgressViewMode = 'day';
-
-  // Project Filtering State
   private selectedProject: string = 'all';
 
-  // Activity Feed State
   private feedDayOffset: number | null = 0;
   private feedPageIndex: number = 0;
   private readonly FEED_PAGE_SIZE: number = 15;
   private feedCardEl: HTMLElement | null = null;
 
-  constructor(leaf: WorkspaceLeaf, dataEngine: DataEngine, settings: VitalsSettings) {
-    super(leaf);
+  constructor(app: App, dataEngine: DataEngine, settings: VitalsSettings) {
+    this.app = app;
     this.dataEngine = dataEngine;
     this.settings = settings;
   }
 
-  public updateSettings(settings: VitalsSettings): void {
-    this.settings = settings;
-    this.render();
-  }
-
-  public getViewType(): string {
-    return DASHBOARD_VIEW_TYPE;
-  }
-
-  public getDisplayText(): string {
-    return 'Vitals Dashboard';
-  }
-
-  public getIcon(): string {
-    return 'activity';
-  }
-
-  public async onOpen(): Promise<void> {
-    this.render();
-  }
-
-  public render(): void {
-    const container = this.contentEl;
+  public render(container: HTMLElement): void {
+    this.containerEl = container;
     container.empty();
     container.addClass('activity-analytics-container');
 
-    // Dynamic theme preset classes with default fallback
-    const activeTheme = this.settings?.themePreset || 'vitals-stealth';
-    container.removeClass(
-      'theme-vitals-stealth',
-      'theme-github-dark',
-      'theme-github-light',
-      'theme-nord-frost',
-      'theme-obsidian-native',
-    );
-    container.addClass(`theme-${activeTheme}`);
-
     const rawActivities = this.dataEngine.getActivities();
 
-    // 1. Extract Unique Projects for the Selector
     const projectCounts: Record<string, number> = {};
     for (const a of rawActivities) {
       if (a.project) {
@@ -82,20 +47,20 @@ export class DashboardView extends ItemView {
     }
     const uniqueProjects = Object.keys(projectCounts).sort();
 
-    // Filter activities by selected project across the entire dashboard
     const allActivities =
       this.selectedProject === 'all' ? rawActivities : rawActivities.filter((a) => a.project === this.selectedProject);
 
-    // Top Header & Compact Controls
+    // Top Header & Controls
     const topBar = container.createEl('div', { cls: 'analytics-top-bar' });
     const titleArea = topBar.createEl('div', { cls: 'analytics-title-area' });
-    titleArea.createEl('h2', { text: 'Vitals' });
+    titleArea.createEl('h2', { text: 'Overview' });
 
     const filterContainer = topBar.createEl('div', { cls: 'analytics-top-controls' });
 
-    // Native Obsidian Project Menu Popover
+    // Project Dropdown
     if (uniqueProjects.length > 0) {
-      const projectPill = filterContainer.createEl('button', {
+      const projectGroup = filterContainer.createEl('div', { cls: 'analytics-pill-group' });
+      const projectPill = projectGroup.createEl('button', {
         cls: `analytics-pill-btn project-pill-btn ${this.selectedProject !== 'all' ? 'is-active' : ''}`,
       });
 
@@ -113,7 +78,7 @@ export class DashboardView extends ItemView {
             .onClick(() => {
               this.selectedProject = 'all';
               this.feedPageIndex = 0;
-              this.render();
+              this.render(container);
             });
         });
 
@@ -127,7 +92,7 @@ export class DashboardView extends ItemView {
               .onClick(() => {
                 this.selectedProject = proj;
                 this.feedPageIndex = 0;
-                this.render();
+                this.render(container);
               });
           });
         }
@@ -156,7 +121,7 @@ export class DashboardView extends ItemView {
       this.exportMarkdown(filteredActivities);
     });
 
-    // Stepped Navigation (‹ Label ›) for Day, Month, and Year
+    // Stepped Navigation (‹ Label ›)
     if (this.currentRange === 'day' || this.currentRange === 'month' || this.currentRange === 'year') {
       const navGroup = filterContainer.createEl('div', { cls: 'analytics-pill-group range-nav-group' });
 
@@ -167,7 +132,7 @@ export class DashboardView extends ItemView {
       });
       prevBtn.addEventListener('click', () => {
         this.rangeOffset += 1;
-        this.render();
+        this.render(container);
       });
 
       navGroup.createEl('span', {
@@ -184,7 +149,7 @@ export class DashboardView extends ItemView {
       if (!isAtCurrent) {
         nextBtn.addEventListener('click', () => {
           this.rangeOffset = Math.max(0, this.rangeOffset - 1);
-          this.render();
+          this.render(container);
         });
       }
     }
@@ -207,40 +172,37 @@ export class DashboardView extends ItemView {
       btn.addEventListener('click', () => {
         this.currentRange = r.key;
         this.rangeOffset = 0;
-        this.render();
+        this.render(container);
       });
     }
 
     const filteredActivities = this.filterActivities(allActivities, this.currentRange, this.rangeOffset);
     const prevActivities = this.getPreviousPeriodActivities(allActivities, this.currentRange, this.rangeOffset);
 
-    // 1. Metric Cards with Comparison Deltas
+    // 1. Metric Cards
     this.renderMetricCards(container, filteredActivities, prevActivities);
 
-    // 2. Consistency Heatmap (with Year Selector)
+    // 2. Consistency Heatmap
     HeatmapView.render(container, allActivities, this.app);
 
-    // 2.5 Time-of-Day Hourly Punch Card
+    // 2.5 Time-of-Day Punch Card
     TimeOfDayView.render(container, filteredActivities);
 
-    // 3. Lower Row: Trend & Donut/Bar
+    // 3. Trend & Category Charts
     const chartsRow = container.createEl('div', { cls: 'analytics-charts-row' });
 
     WeeklyProgressView.render(chartsRow, allActivities, this.progressMode, (newMode) => {
       this.progressMode = newMode;
-      this.render();
+      this.render(container);
     });
 
     CategoryChartView.render(chartsRow, filteredActivities, this.settings.categoryColors);
 
-    // 4. Dynamic Activity Feed Table (In-Place Scroll Preservation)
+    // 4. In-Place Activity Feed
     this.feedCardEl = container.createEl('div', { cls: 'analytics-card vitals-recent-card' });
     this.renderActivityFeedInPlace(allActivities);
   }
 
-  /**
-   * Metric summary cards with percentage comparison deltas
-   */
   private renderMetricCards(container: HTMLElement, activities: Activity[], prevActivities: Activity[]): void {
     const grid = container.createEl('div', { cls: 'analytics-metrics-grid' });
 
@@ -265,34 +227,10 @@ export class DashboardView extends ItemView {
     const avgHours = (avgMinutesPerDay / 60).toFixed(1);
 
     const metrics = [
-      {
-        label: 'Total Time',
-        value: totalHours,
-        unit: 'hrs',
-        badge: loggedBadge,
-        delta: timeDelta,
-      },
-      {
-        label: 'Active Days',
-        value: `${activeDays}`,
-        unit: 'days',
-        badge: 'consistency',
-        delta: daysDelta,
-      },
-      {
-        label: 'Categories',
-        value: `${uniqueCategories}`,
-        unit: 'types',
-        badge: 'active',
-        delta: null,
-      },
-      {
-        label: 'Daily Avg',
-        value: avgHours,
-        unit: 'hrs/day',
-        badge: 'pace',
-        delta: null,
-      },
+      { label: 'Total Time', value: totalHours, unit: 'hrs', badge: loggedBadge, delta: timeDelta },
+      { label: 'Active Days', value: `${activeDays}`, unit: 'days', badge: 'consistency', delta: daysDelta },
+      { label: 'Categories', value: `${uniqueCategories}`, unit: 'types', badge: 'active', delta: null },
+      { label: 'Daily Avg', value: avgHours, unit: 'hrs/day', badge: 'pace', delta: null },
     ];
 
     for (const m of metrics) {
@@ -315,9 +253,6 @@ export class DashboardView extends ItemView {
     }
   }
 
-  /**
-   * Re-renders strictly the Activity Feed element in-place to preserve view scroll position
-   */
   private renderActivityFeedInPlace(allActivities: Activity[]): void {
     if (!this.feedCardEl) return;
     const card = this.feedCardEl;
@@ -342,7 +277,6 @@ export class DashboardView extends ItemView {
     const controls = header.createEl('div', { cls: 'feed-header-controls' });
     const navGroup = controls.createEl('div', { cls: 'analytics-pill-group' });
 
-    // Previous Day Button (‹)
     const prevDayBtn = navGroup.createEl('button', {
       text: '‹',
       cls: 'analytics-pill-btn',
@@ -358,7 +292,6 @@ export class DashboardView extends ItemView {
       this.renderActivityFeedInPlace(allActivities);
     });
 
-    // Date / Context Badge
     let labelText = '';
     if (isFallbackMode) {
       labelText = 'Latest Activities';
@@ -370,12 +303,8 @@ export class DashboardView extends ItemView {
       labelText = targetDateIso || '';
     }
 
-    navGroup.createEl('span', {
-      text: labelText,
-      cls: 'trend-nav-current-label',
-    });
+    navGroup.createEl('span', { text: labelText, cls: 'trend-nav-current-label' });
 
-    // Next Day Button (›) — disabled if we are at Today
     const isAtToday = this.feedDayOffset === 0;
     const nextDayBtn = navGroup.createEl('button', {
       text: '›',
@@ -393,7 +322,8 @@ export class DashboardView extends ItemView {
     }
 
     // Reset to "Today" Button
-    const todayBtn = controls.createEl('button', {
+    const todayGroup = controls.createEl('div', { cls: 'analytics-pill-group' });
+    const todayBtn = todayGroup.createEl('button', {
       text: 'Today',
       cls: `analytics-pill-btn ${this.feedDayOffset === 0 && !isFallbackMode ? 'is-active' : ''}`,
     });
@@ -403,7 +333,6 @@ export class DashboardView extends ItemView {
       this.renderActivityFeedInPlace(allActivities);
     });
 
-    // Resolve filtered list
     let feedList: Activity[] = [];
     if (isFallbackMode) {
       feedList = [...allActivities].filter((a) => a.date).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
@@ -419,7 +348,6 @@ export class DashboardView extends ItemView {
       return;
     }
 
-    // Pagination slice (15 items per page)
     const totalItems = feedList.length;
     const totalPages = Math.ceil(totalItems / this.FEED_PAGE_SIZE);
     const startIdx = this.feedPageIndex * this.FEED_PAGE_SIZE;
@@ -428,7 +356,6 @@ export class DashboardView extends ItemView {
     const tableWrapper = card.createEl('div', { cls: 'vitals-table-wrapper' });
     const table = tableWrapper.createEl('table', { cls: 'vitals-recent-table' });
 
-    // Table Header
     const thead = table.createEl('thead');
     const hRow = thead.createEl('tr');
     hRow.createEl('th', { text: 'Date' });
@@ -437,15 +364,11 @@ export class DashboardView extends ItemView {
     hRow.createEl('th', { text: 'Duration' });
     hRow.createEl('th', { text: 'Project' });
 
-    // Table Body
     const tbody = table.createEl('tbody');
     for (const act of pagedList) {
       const row = tbody.createEl('tr');
-
-      // Date
       row.createEl('td', { text: act.date || '-', cls: 'vitals-td-date' });
 
-      // Note Link
       const noteCell = row.createEl('td', { cls: 'vitals-td-note' });
       const link = noteCell.createEl('a', { text: act.title, cls: 'vitals-note-link' });
       link.addEventListener('click', async () => {
@@ -456,7 +379,6 @@ export class DashboardView extends ItemView {
         }
       });
 
-      // Category Badge
       const catCell = row.createEl('td');
       const badge = catCell.createEl('span', { text: act.type, cls: 'vitals-item-badge' });
       if (this.settings.categoryColors[act.type]) {
@@ -465,17 +387,14 @@ export class DashboardView extends ItemView {
         badge.style.backgroundColor = `${this.settings.categoryColors[act.type]}1a`;
       }
 
-      // Duration
       const durHours = (act.duration / 60).toFixed(1);
       const durCell = row.createEl('td', { cls: 'vitals-td-dur' });
       durCell.createEl('span', { text: `${durHours}h ` });
       durCell.createEl('small', { text: `(${act.duration}m)` });
 
-      // Project
       row.createEl('td', { text: act.project ? `@${act.project}` : '-', cls: 'vitals-td-proj' });
     }
 
-    // Pagination Footer
     if (totalItems > this.FEED_PAGE_SIZE) {
       const footer = card.createEl('div', { cls: 'feed-pagination-footer' });
 
@@ -528,14 +447,12 @@ export class DashboardView extends ItemView {
 
   private getPreviousPeriodActivities(activities: Activity[], range: TimeRangeFilter, offset: number): Activity[] {
     const now = new Date();
-
     if (range === 'day') {
       const prevDate = new Date(now);
       prevDate.setDate(now.getDate() - (offset + 1));
       const prevIso = this.formatDateISO(prevDate);
       return activities.filter((a) => a.date === prevIso);
     }
-
     if (range === '30d') {
       const past30 = new Date(now);
       past30.setDate(now.getDate() - 30);
@@ -548,15 +465,12 @@ export class DashboardView extends ItemView {
         return d >= past60 && d < past30;
       });
     }
-
     if (range === 'month') {
       return this.filterActivities(activities, 'month', offset + 1);
     }
-
     if (range === 'year') {
       return this.filterActivities(activities, 'year', offset + 1);
     }
-
     return [];
   }
 
@@ -565,7 +479,6 @@ export class DashboardView extends ItemView {
       new Notice('No activities available to export.');
       return;
     }
-
     const headers = ['Title', 'Category', 'Date', 'Duration (Minutes)', 'Duration (Hours)', 'Project', 'File Path'];
     const rows = activities.map((a) => [
       `"${a.title.replace(/"/g, '""')}"`,
@@ -576,7 +489,6 @@ export class DashboardView extends ItemView {
       `"${(a.project || '').replace(/"/g, '""')}"`,
       `"${a.id.replace(/"/g, '""')}"`,
     ]);
-
     const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     this.downloadFile(csvContent, `vitals-export-${this.currentRange}.csv`, 'text/csv;charset=utf-8;');
     new Notice('Exported activities to CSV.');
@@ -587,21 +499,17 @@ export class DashboardView extends ItemView {
       new Notice('No activities available to export.');
       return;
     }
-
     const totalMinutes = activities.reduce((sum, a) => sum + a.duration, 0);
     const totalHours = (totalMinutes / 60).toFixed(1);
 
     let md = `# Vitals Activity Export (${this.currentRange.toUpperCase()})\n\n`;
     md += `**Total Logged Time:** ${totalHours} hrs (${totalMinutes} mins)  \n`;
     md += `**Total Notes:** ${activities.length}  \n\n`;
-    md += `| Date | Title | Category | Duration | Project |\n`;
-    md += `| :--- | :--- | :--- | :--- | :--- |\n`;
-
+    md += `| Date | Title | Category | Duration | Project |\n| :--- | :--- | :--- | :--- | :--- |\n`;
     for (const a of activities) {
       const dur = `${(a.duration / 60).toFixed(1)}h (${a.duration}m)`;
       md += `| ${a.date || 'N/A'} | [[${a.title}]] | ${a.type} | ${dur} | ${a.project || '-'} |\n`;
     }
-
     this.downloadFile(md, `vitals-summary-${this.currentRange}.md`, 'text/markdown;charset=utf-8;');
     new Notice('Exported activities to Markdown.');
   }
@@ -623,26 +531,21 @@ export class DashboardView extends ItemView {
     if (this.currentRange === 'day') {
       const targetDate = new Date(now);
       targetDate.setDate(now.getDate() - this.rangeOffset);
-      if (this.rangeOffset === 0) {
-        return `Today (${this.formatDisplayDate(targetDate)})`;
-      }
-      return `${this.formatDisplayDate(targetDate)}`;
+      return this.rangeOffset === 0
+        ? `Today (${this.formatDisplayDate(targetDate)})`
+        : `${this.formatDisplayDate(targetDate)}`;
     } else if (this.currentRange === 'month') {
       const targetDate = new Date(now.getFullYear(), now.getMonth() - this.rangeOffset, 1);
       return targetDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
     } else if (this.currentRange === 'year') {
-      const targetYear = now.getFullYear() - this.rangeOffset;
-      return `${targetYear}`;
+      return `${now.getFullYear() - this.rangeOffset}`;
     }
     return '';
   }
 
   private filterActivities(activities: Activity[], range: TimeRangeFilter, offset: number): Activity[] {
     const now = new Date();
-
-    if (range === 'all') {
-      return activities;
-    }
+    if (range === 'all') return activities;
 
     if (range === 'day') {
       const targetDate = new Date(now);
@@ -650,7 +553,6 @@ export class DashboardView extends ItemView {
       const iso = this.formatDateISO(targetDate);
       return activities.filter((a) => a.date === iso);
     }
-
     if (range === '30d') {
       const past30 = new Date(now);
       past30.setDate(now.getDate() - 30);
@@ -660,31 +562,26 @@ export class DashboardView extends ItemView {
         return d >= past30 && d <= now;
       });
     }
-
     if (range === 'month') {
       const targetMonthDate = new Date(now.getFullYear(), now.getMonth() - offset, 1);
       const start = new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth(), 1);
       const end = new Date(targetMonthDate.getFullYear(), targetMonthDate.getMonth() + 1, 0, 23, 59, 59);
-
       return activities.filter((a) => {
         if (!a.date) return false;
         const d = new Date(a.date + 'T00:00:00');
         return d >= start && d <= end;
       });
     }
-
     if (range === 'year') {
       const targetYear = now.getFullYear() - offset;
       const start = new Date(targetYear, 0, 1);
       const end = new Date(targetYear, 11, 31, 23, 59, 59);
-
       return activities.filter((a) => {
         if (!a.date) return false;
         const d = new Date(a.date + 'T00:00:00');
         return d >= start && d <= end;
       });
     }
-
     return activities;
   }
 
@@ -702,9 +599,10 @@ export class DashboardView extends ItemView {
     return `${dd}/${mm}/${yyyy}`;
   }
 
-  public async onClose(): Promise<void> {
+  public destroy(): void {
     WeeklyProgressView.destroy();
     CategoryChartView.destroy();
     this.feedCardEl = null;
+    this.containerEl = null;
   }
 }

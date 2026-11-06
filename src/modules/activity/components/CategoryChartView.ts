@@ -9,7 +9,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Activity } from '../../models/Activity';
+import { Activity } from '../../../models/Activity';
 
 Chart.register(DoughnutController, ArcElement, BarController, BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 

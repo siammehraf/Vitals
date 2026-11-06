@@ -1,0 +1,127 @@
+@import url('https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Fira+Code:wght@400;500;600&display=swap');
+
+:root {
+  --vitals-font-family: 'Geist Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* Theme: Vitals Stealth (Default) */
+.vitals-app-root,
+.vitals-app-root.theme-vitals-stealth,
+.activity-analytics-container,
+.activity-analytics-container.theme-vitals-stealth {
+  --vitals-bg-main: #0b0f17;
+  --vitals-bg-card: #11141a;
+  --vitals-bg-pill: #1a202c;
+  --vitals-bg-pill-hover: rgba(255, 255, 255, 0.06);
+  --vitals-border: rgba(255, 255, 255, 0.08);
+  --vitals-border-subtle: rgba(255, 255, 255, 0.04);
+  --vitals-accent: #2dd4bf;
+  --vitals-accent-hover: #14b8a6;
+  --vitals-accent-glow: rgba(45, 212, 191, 0.35);
+  --vitals-text-main: #f8fafc;
+  --vitals-text-body: #cbd5e1;
+  --vitals-text-muted: #94a3b8;
+  --vitals-text-faint: #64748b;
+  --vitals-tooltip-bg: #0f172a;
+  --vitals-heat-0: #1a202c;
+  --vitals-heat-1: #0e4429;
+  --vitals-heat-2: #006d32;
+  --vitals-heat-3: #26a641;
+  --vitals-heat-4: #39d353;
+}
+
+/* Theme: GitHub Dark */
+.vitals-app-root.theme-github-dark,
+.activity-analytics-container.theme-github-dark {
+  --vitals-bg-main: #010409;
+  --vitals-bg-card: #0d1117;
+  --vitals-bg-pill: #161b22;
+  --vitals-bg-pill-hover: #21262d;
+  --vitals-border: #30363d;
+  --vitals-border-subtle: #21262d;
+  --vitals-accent: #2f81f7;
+  --vitals-accent-hover: #58a6ff;
+  --vitals-accent-glow: rgba(47, 129, 247, 0.35);
+  --vitals-text-main: #f0f6fc;
+  --vitals-text-body: #c9d1d9;
+  --vitals-text-muted: #8b949e;
+  --vitals-text-faint: #6e7681;
+  --vitals-tooltip-bg: #161b22;
+  --vitals-heat-0: #161b22;
+  --vitals-heat-1: #0e4429;
+  --vitals-heat-2: #006d32;
+  --vitals-heat-3: #26a641;
+  --vitals-heat-4: #39d353;
+}
+
+/* Theme: GitHub Light */
+.vitals-app-root.theme-github-light,
+.activity-analytics-container.theme-github-light {
+  --vitals-bg-main: #f6f8fa;
+  --vitals-bg-card: #ffffff;
+  --vitals-bg-pill: #eaeef2;
+  --vitals-bg-pill-hover: #d0d7de;
+  --vitals-border: #d0d7de;
+  --vitals-border-subtle: #eaeef2;
+  --vitals-accent: #0969da;
+  --vitals-accent-hover: #0550ae;
+  --vitals-accent-glow: rgba(9, 105, 218, 0.2);
+  --vitals-text-main: #1f2328;
+  --vitals-text-body: #24292f;
+  --vitals-text-muted: #57606a;
+  --vitals-text-faint: #8c959f;
+  --vitals-tooltip-bg: #24292f;
+  --vitals-heat-0: #ebedf0;
+  --vitals-heat-1: #9be9a8;
+  --vitals-heat-2: #40c463;
+  --vitals-heat-3: #30a14e;
+  --vitals-heat-4: #216e39;
+}
+
+/* Theme: Nord Frost */
+.vitals-app-root.theme-nord-frost,
+.activity-analytics-container.theme-nord-frost {
+  --vitals-bg-main: #242933;
+  --vitals-bg-card: #2e3440;
+  --vitals-bg-pill: #3b4252;
+  --vitals-bg-pill-hover: #434c5e;
+  --vitals-border: #4c566a;
+  --vitals-border-subtle: rgba(255, 255, 255, 0.05);
+  --vitals-accent: #88c0d0;
+  --vitals-accent-hover: #81a1c1;
+  --vitals-accent-glow: rgba(136, 192, 208, 0.35);
+  --vitals-text-main: #eceff4;
+  --vitals-text-body: #e5e9f0;
+  --vitals-text-muted: #d8dee9;
+  --vitals-text-faint: #7b88a1;
+  --vitals-tooltip-bg: #2e3440;
+  --vitals-heat-0: #3b4252;
+  --vitals-heat-1: #4c566a;
+  --vitals-heat-2: #5e81ac;
+  --vitals-heat-3: #81a1c1;
+  --vitals-heat-4: #88c0d0;
+}
+
+/* Theme: Obsidian Native */
+.vitals-app-root.theme-obsidian-native,
+.activity-analytics-container.theme-obsidian-native {
+  --vitals-bg-main: var(--background-primary);
+  --vitals-bg-card: var(--background-secondary);
+  --vitals-bg-pill: var(--background-primary-alt);
+  --vitals-bg-pill-hover: var(--background-modifier-hover);
+  --vitals-border: var(--background-modifier-border);
+  --vitals-border-subtle: var(--background-modifier-border-focus);
+  --vitals-accent: var(--interactive-accent);
+  --vitals-accent-hover: var(--interactive-accent-hover);
+  --vitals-accent-glow: rgba(var(--interactive-accent-rgb), 0.3);
+  --vitals-text-main: var(--text-normal);
+  --vitals-text-body: var(--text-muted);
+  --vitals-text-muted: var(--text-faint);
+  --vitals-text-faint: var(--text-faint);
+  --vitals-tooltip-bg: var(--background-secondary-alt);
+  --vitals-heat-0: var(--background-modifier-form-field);
+  --vitals-heat-1: #0e4429;
+  --vitals-heat-2: #006d32;
+  --vitals-heat-3: #26a641;
+  --vitals-heat-4: #39d353;
+}

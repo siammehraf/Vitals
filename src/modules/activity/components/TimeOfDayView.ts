@@ -1,4 +1,4 @@
-import { Activity } from '../../models/Activity';
+import { Activity } from '../../../models/Activity';
 
 export class TimeOfDayView {
   public static render(container: HTMLElement, activities: Activity[]): void {

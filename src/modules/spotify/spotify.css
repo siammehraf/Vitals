@@ -1,0 +1,1188 @@
+.vitals-placeholder-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 380px;
+  margin-top: 20px;
+  gap: 12px;
+}
+
+.vitals-placeholder-card h2 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--vitals-text-main);
+  margin: 0;
+}
+
+.vitals-placeholder-desc {
+  font-size: 0.9rem;
+  color: var(--vitals-text-muted);
+  max-width: 440px;
+  margin: 0;
+}
+
+.vitals-coming-soon-badge {
+  margin-top: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--vitals-accent);
+  background-color: var(--vitals-bg-pill);
+  border: 1px solid var(--vitals-accent-glow);
+  padding: 4px 12px;
+  border-radius: 20px;
+}
+
+/* ==========================================================================
+   Spotify & stats.fm Music Dashboard Styling
+   ========================================================================== */
+
+.vitals-spotify-container {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Now Playing Card */
+.spotify-now-playing-card {
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(30, 215, 96, 0.08) 0%, var(--vitals-bg-card) 60%);
+  border-color: rgba(30, 215, 96, 0.25);
+  margin-bottom: 22px;
+}
+
+.spotify-np-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+
+.spotify-np-art-wrapper {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.spotify-np-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.spotify-np-details {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.spotify-np-status-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spotify-np-badge {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #1ed760;
+  letter-spacing: 0.08em;
+}
+
+/* Equalizer Bars Animation */
+.spotify-equalizer {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 12px;
+  width: 14px;
+}
+
+.eq-bar {
+  width: 3px;
+  background-color: #1ed760;
+  border-radius: 1px;
+  animation: eqBounce 1.2s infinite ease-in-out;
+}
+
+.eq-1 {
+  height: 6px;
+  animation-delay: 0.1s;
+}
+.eq-2 {
+  height: 12px;
+  animation-delay: 0.3s;
+}
+.eq-3 {
+  height: 8px;
+  animation-delay: 0.2s;
+}
+
+@keyframes eqBounce {
+  0%,
+  100% {
+    height: 3px;
+  }
+  50% {
+    height: 12px;
+  }
+}
+
+.spotify-np-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--vitals-text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spotify-np-artist {
+  font-size: 0.85rem;
+  color: var(--vitals-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spotify-progress-wrapper {
+  margin-top: 8px;
+}
+
+.spotify-progress-bar {
+  height: 4px;
+  background-color: var(--vitals-bg-pill);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.spotify-progress-fill {
+  height: 100%;
+  background-color: #1ed760;
+  border-radius: 2px;
+}
+
+.spotify-time-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.68rem;
+  color: var(--vitals-text-faint);
+  margin-top: 4px;
+}
+
+/* ==========================================================================
+   Root Layout & Scroll Buffer (Chromium Scroll Height Fix)
+   ========================================================================== */
+
+.vitals-spotify-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-gutter: stable;
+}
+
+.analytics-metrics-grid {
+  display: grid !important;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  margin-bottom: 14px !important;
+}
+
+.analytics-metric-card {
+  min-width: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* ==========================================================================
+   Full-Width 2-Row Sub-Navigation Grid (5 per row)
+   ========================================================================== */
+
+.spotify-subnav-grid {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 8px !important;
+  width: 100% !important;
+  margin: 6px 0 16px 0 !important;
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 900px) {
+  .spotify-subnav-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+.spotify-subnav-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  width: 100% !important;
+  padding: 0 10px !important;
+  height: 36px !important;
+  border-radius: 8px !important;
+  font-size: 0.82rem !important;
+  font-weight: 500 !important;
+  line-height: 34px !important;
+  box-sizing: border-box !important;
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  background-color: var(--vitals-bg-pill, rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid var(--vitals-border-subtle, rgba(255, 255, 255, 0.1)) !important;
+  color: var(--vitals-text-muted, #9ca3af) !important;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease !important;
+  user-select: none !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.spotify-subnav-btn * {
+  pointer-events: none !important;
+}
+
+.spotify-subnav-btn:hover {
+  background-color: var(--vitals-bg-pill-hover, rgba(255, 255, 255, 0.08)) !important;
+  color: var(--vitals-text-main, #ffffff) !important;
+}
+
+.spotify-subnav-btn.is-active {
+  background-color: rgba(30, 215, 96, 0.15) !important;
+  border-color: #1ed760 !important;
+  color: #1ed760 !important;
+  box-shadow: 0 0 8px rgba(30, 215, 96, 0.2) !important;
+}
+
+/* ==========================================================================
+   Stage & Guaranteed Footer Buffer
+   ========================================================================== */
+
+.spotify-tab-stage {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  min-height: 320px;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 72px !important; /* Padding on the in-flow child forces the scroll engine to keep scrolling */
+}
+
+/* Internal card spacing so the bottom track never touches the card outline */
+.spotify-tab-stage .analytics-card {
+  padding-bottom: 16px !important;
+}
+
+/* Physical in-flow pseudo-block that guarantees a dark margin above the taskbar */
+.spotify-tab-stage::after {
+  content: '' !important;
+  display: block !important;
+  width: 100% !important;
+  height: 48px !important;
+  min-height: 48px !important;
+  flex-shrink: 0 !important;
+}
+
+/* Margin on the last card rendered inside any tab */
+.spotify-tab-stage > .analytics-card:last-child {
+  margin-bottom: 24px !important;
+}
+
+/* Hard DOM Spacer: forces outer Obsidian scroll containers to reserve bottom clearance */
+.spotify-bottom-spacer {
+  display: block !important;
+  width: 100% !important;
+  height: 64px !important;
+  min-height: 64px !important;
+  flex-shrink: 0 !important;
+  clear: both !important;
+  pointer-events: none !important;
+}
+
+/* Ranked Tracks List */
+.spotify-ranked-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.spotify-track-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 12px;
+  background-color: var(--vitals-bg-main);
+  border: 1px solid var(--vitals-border-subtle);
+  border-radius: 8px;
+  transition:
+    background-color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.spotify-track-row:hover {
+  background-color: var(--vitals-bg-pill-hover);
+  border-color: rgba(30, 215, 96, 0.3);
+}
+
+.spotify-rank-num {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--vitals-text-faint);
+  width: 22px;
+  text-align: center;
+}
+
+.spotify-rank-num.top-1 {
+  color: #ffd700;
+}
+.spotify-rank-num.top-2 {
+  color: #c0c0c0;
+}
+.spotify-rank-num.top-3 {
+  color: #cd7f32;
+}
+
+.spotify-track-art {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.spotify-track-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.spotify-track-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--vitals-text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spotify-track-sub {
+  font-size: 0.74rem;
+  color: var(--vitals-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spotify-track-meta {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.spotify-stream-count {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #1ed760;
+}
+
+.spotify-track-dur {
+  font-size: 0.7rem;
+  color: var(--vitals-text-faint);
+}
+
+/* Artists Grid */
+.spotify-artists-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.spotify-artist-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 14px;
+  background-color: var(--vitals-bg-main);
+  border: 1px solid var(--vitals-border-subtle);
+  border-radius: 10px;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.spotify-artist-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(30, 215, 96, 0.4);
+}
+
+.spotify-artist-art-wrapper {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.spotify-artist-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.spotify-artist-rank-tag {
+  position: absolute;
+  bottom: 0;
+  right: 4px;
+  background-color: #0b0f17;
+  color: var(--vitals-text-body);
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 10px;
+  border: 1px solid var(--vitals-border);
+}
+
+.spotify-artist-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--vitals-text-main);
+  width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spotify-artist-genres {
+  font-size: 0.7rem;
+  color: var(--vitals-text-faint);
+  margin-top: 2px;
+}
+
+/* Genre Distribution */
+.spotify-genres-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.spotify-genre-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 80px;
+  align-items: center;
+  gap: 12px;
+}
+
+.spotify-genre-name {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--vitals-text-body);
+  text-transform: capitalize;
+}
+
+.spotify-genre-bar-bg {
+  height: 8px;
+  background-color: var(--vitals-bg-pill);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.spotify-genre-bar-fill {
+  height: 100%;
+  background-color: #1ed760;
+  border-radius: 4px;
+}
+
+.spotify-genre-count {
+  font-size: 0.74rem;
+  color: var(--vitals-text-muted);
+  text-align: right;
+}
+
+@media (max-width: 768px) {
+  .spotify-np-wrapper {
+    flex-direction: column;
+    text-align: center;
+  }
+  .spotify-np-status-row {
+    justify-content: center;
+  }
+  .spotify-genre-row {
+    grid-template-columns: 100px 1fr 60px;
+  }
+}
+
+/* Drag and Drop JSON Upload Zone */
+.spotify-upload-card {
+  text-align: center;
+  padding: 32px 24px;
+}
+
+.spotify-upload-desc {
+  font-size: 0.85rem;
+  color: var(--vitals-text-muted);
+  max-width: 500px;
+  margin: 0 auto 20px auto;
+}
+
+.spotify-dropzone {
+  border: 2px dashed var(--vitals-border);
+  border-radius: 12px;
+  padding: 40px 20px;
+  background-color: var(--vitals-bg-main);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.spotify-dropzone:hover {
+  border-color: #1ed760;
+  background-color: rgba(30, 215, 96, 0.04);
+}
+
+.spotify-dropzone-icon {
+  font-size: 2.2rem;
+}
+
+.spotify-dropzone p {
+  color: var(--vitals-text-body);
+  font-size: 0.88rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.spotify-file-input {
+  display: none;
+}
+
+.spotify-danger-btn {
+  margin-top: 24px;
+  color: #ef4444 !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+.spotify-danger-btn:hover {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+}
+
+/* Filter Sub-Bar Styling */
+.spotify-filter-subbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  background-color: var(--vitals-bg-card);
+  border: 1px solid var(--vitals-border);
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 18px;
+}
+
+.filter-subbar-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--vitals-text-muted);
+}
+
+.spotify-filter-select,
+.spotify-filter-date-input {
+  background-color: var(--vitals-bg-pill);
+  border: 1px solid var(--vitals-border);
+  color: var(--vitals-text-main);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+}
+
+.spotify-filter-select:focus,
+.spotify-filter-date-input:focus {
+  border-color: var(--vitals-accent);
+}
+
+/* Top Albums Grid */
+.spotify-albums-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.spotify-album-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 14px;
+  background-color: var(--vitals-bg-main);
+  border: 1px solid var(--vitals-border-subtle);
+  border-radius: 10px;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.spotify-album-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(30, 215, 96, 0.4);
+}
+
+.spotify-album-art-wrapper {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 10px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.spotify-album-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Dynamic Initials Badges */
+.vitals-cover-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  color: #ffffff;
+  font-weight: 700;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  user-select: none;
+}
+
+.spotify-track-art-wrapper {
+  width: 44px;
+  height: 44px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vitals-cover-badge.track {
+  font-size: 0.95rem;
+}
+
+.vitals-cover-badge.artist {
+  font-size: 1.25rem;
+  border-radius: 50%;
+}
+
+.vitals-cover-badge.album {
+  font-size: 1.15rem;
+  border-radius: 8px;
+}
+
+/* ==========================================================================
+   Recently Played Feed (stats.fm Style)
+   ========================================================================== */
+
+.spotify-recent-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.spotify-recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.spotify-recent-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  background-color: var(--vitals-bg-main);
+  border: 1px solid var(--vitals-border-subtle);
+  border-radius: 8px;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.spotify-recent-row:hover {
+  background-color: var(--vitals-bg-pill-hover);
+  border-color: rgba(30, 215, 96, 0.35);
+  transform: translateX(2px);
+}
+
+.spotify-recent-art-wrapper {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.spotify-recent-art {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.spotify-recent-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.spotify-recent-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--vitals-text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spotify-recent-artist {
+  font-size: 0.76rem;
+  color: var(--vitals-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spotify-recent-meta {
+  text-align: right;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.spotify-recent-timestamp {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #1ed760;
+}
+
+.spotify-recent-dur {
+  font-size: 0.7rem;
+  color: var(--vitals-text-faint);
+}
+
+/* ==========================================================================
+   Listening Hours Heatmap (GitHub Style)
+   ========================================================================== */
+
+.spotify-heatmap-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+}
+
+.spotify-heatmap-stats {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--vitals-border-subtle);
+}
+
+.spotify-heatmap-stat-box {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 120px;
+}
+
+.heatmap-stat-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--vitals-text-muted);
+}
+
+.heatmap-stat-val {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1ed760;
+  font-family: var(--vitals-font-mono, monospace);
+}
+
+.spotify-heatmap-scroll {
+  overflow-x: auto;
+  padding: 12px 0;
+  width: 100%;
+}
+
+.spotify-heatmap-grid {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 8px;
+  align-items: flex-start;
+  min-height: 120px;
+}
+
+.spotify-heatmap-days-col {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.heatmap-day-label {
+  height: 13px;
+  font-size: 0.65rem;
+  line-height: 13px;
+  color: var(--vitals-text-faint);
+  user-select: none;
+}
+
+.spotify-heatmap-weeks {
+  display: flex !important;
+  flex-direction: row !important;
+  gap: 4px;
+  flex: 1;
+}
+
+.spotify-heatmap-week {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.spotify-heatmap-cell {
+  width: 13px !important;
+  height: 13px !important;
+  border-radius: 2px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  cursor: pointer;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.spotify-heatmap-cell.is-empty {
+  visibility: hidden !important;
+}
+
+.spotify-heatmap-cell.level-0 {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.spotify-heatmap-cell.level-1 {
+  background-color: #0e4429;
+}
+
+.spotify-heatmap-cell.level-2 {
+  background-color: #006d32;
+}
+
+.spotify-heatmap-cell.level-3 {
+  background-color: #26a641;
+}
+
+.spotify-heatmap-cell.level-4 {
+  background-color: #39d353;
+  box-shadow: 0 0 6px rgba(57, 211, 83, 0.4);
+}
+
+.spotify-heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.heatmap-legend-label {
+  font-size: 0.72rem;
+  color: var(--vitals-text-muted);
+}
+
+/* ==========================================================================
+   Spotify Day Detail Modal
+   ========================================================================== */
+
+.vitals-spotify-modal-container {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 80vh;
+}
+
+.spotify-modal-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--vitals-border-subtle);
+}
+
+.spotify-modal-title {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--vitals-text-main);
+}
+
+.spotify-modal-meta-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.spotify-modal-scroll {
+  overflow-y: auto;
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-right: 4px;
+}
+
+/* ==========================================================================
+   24-Hour Diurnal Clock
+   ========================================================================== */
+
+.spotify-diurnal-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.spotify-diurnal-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 180px;
+  padding: 16px 0 8px 0;
+  border-bottom: 1px solid var(--vitals-border-subtle);
+}
+
+.spotify-diurnal-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+  gap: 6px;
+}
+
+.spotify-diurnal-bar-wrapper {
+  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: flex-end;
+  background-color: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.spotify-diurnal-bar-fill {
+  width: 100%;
+  background: linear-gradient(180deg, #1ed760 0%, #0e632b 100%);
+  border-radius: 4px 4px 0 0;
+  transition:
+    height 0.3s ease,
+    filter 0.2s ease;
+}
+
+.spotify-diurnal-bar-wrapper:hover .spotify-diurnal-bar-fill {
+  filter: brightness(1.3);
+  box-shadow: 0 0 8px rgba(30, 215, 96, 0.6);
+}
+
+.spotify-diurnal-label {
+  font-size: 0.65rem;
+  color: var(--vitals-text-muted);
+  font-family: var(--vitals-font-mono, monospace);
+  height: 12px;
+}
+
+.spotify-diurnal-footer {
+  display: flex;
+  align-items: center;
+}
+
+/* ==========================================================================
+   Skip Rate & Completion Analytics
+   ========================================================================== */
+
+.spotify-skip-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.spotify-skip-dual-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+@media (max-width: 768px) {
+  .spotify-skip-dual-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.spotify-skip-subtitle {
+  font-size: 0.95rem;
+  margin-bottom: 12px;
+  color: var(--vitals-text-main);
+  font-weight: 600;
+}
+
+.text-danger {
+  color: #f43f5e !important;
+}
+
+/* ==========================================================================
+   Genre Breakdown Matrix
+   ========================================================================== */
+
+.spotify-genre-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.spotify-genre-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background-color: var(--vitals-bg-main);
+  border: 1px solid var(--vitals-border-subtle);
+  border-radius: 8px;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.spotify-genre-card:hover {
+  border-color: rgba(30, 215, 96, 0.4);
+  transform: translateY(-2px);
+}
+
+.spotify-genre-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.spotify-genre-icon {
+  font-size: 1.4rem;
+}
+
+.spotify-genre-pct {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1ed760;
+  font-family: var(--vitals-font-mono, monospace);
+}
+
+.spotify-genre-name {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--vitals-text-main);
+}
+
+.spotify-genre-sub {
+  font-size: 0.75rem;
+  color: var(--vitals-text-muted);
+}
+
+.spotify-genre-bar-wrapper {
+  width: 100%;
+  height: 6px;
+  background-color: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 4px;
+}
+
+.spotify-genre-bar-fill {
+  height: 100%;
+  background-color: #1ed760;
+  border-radius: 999px;
+}
+
+/* ==========================================================================
+   Time Machine ("On This Day")
+   ========================================================================== */
+
+.spotify-time-machine-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.spotify-throwback-bucket {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background-color: var(--vitals-bg-main);
+  border: 1px solid var(--vitals-border-subtle);
+  border-radius: 8px;
+}
+
+.spotify-throwback-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.spotify-throwback-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--vitals-text-main);
+}
+
+.spotify-throwback-meta {
+  display: flex;
+  gap: 8px;
+}
+
+.spotify-empty-text {
+  font-size: 0.8rem;
+  color: var(--vitals-text-faint);
+  margin: 0;
+}

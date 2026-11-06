@@ -1,5 +1,5 @@
 import { App } from 'obsidian';
-import { Activity } from '../../models/Activity';
+import { Activity } from '../../../models/Activity';
 import { HeatmapDayModal } from './HeatmapDayModal';
 
 export type HeatmapScope = 'rolling' | number; // "rolling" (last 52w) or specific calendar year (e.g., 2026, 2025)

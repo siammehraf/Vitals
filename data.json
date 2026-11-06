@@ -1,5 +1,6 @@
 {
   "themePreset": "vitals-stealth",
+  "customFontFamily": "Geist Mono",
   "includedFolders": "",
   "excludedFolders": "Templates, Archive",
   "categoryColors": {
@@ -8,5 +9,8 @@
     "Coding": "#818cf8",
     "Research": "#f59e0b",
     "Unknown": "#64748b"
-  }
+  },
+  "spotifyClientId": "f83cda7c12094a609ece5d9d0c7c3bdd",
+  "spotifyRefreshToken": "AQDnD-HeXfRfp2hxgG-jVmi19rsyiwoiHySBntK8LUubf5C_5LYe1VPVXwFZXMJoCOS8IO3blzpu1pPgMmJM563udcJI5LKj2QOCTlfL8D55i7J5XNAWt2dhbZdleo1xyZg",
+  "spotifyAutoSync": true
 }
